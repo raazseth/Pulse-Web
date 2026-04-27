@@ -26,6 +26,7 @@ import { loadSession, saveSession } from "@/shared/services/sessionIdb";
 import type {
   TranscriptItem,
   TranscriptSessionState,
+  TranscriptSocketServerMessage,
   TranscriptSocketPrompt,
   TranscriptSignalCue,
 } from "@/modules/transcript/types";
@@ -35,7 +36,7 @@ import { useTranscriptStream } from "./useTranscriptStream";
 // Socket mock helpers
 // ---------------------------------------------------------------------------
 
-type MsgHandler = (msg: { type: string; payload?: unknown }) => void;
+type MsgHandler = (msg: TranscriptSocketServerMessage) => void;
 
 interface SocketCallbacks {
   onOpen: () => void;
@@ -572,6 +573,7 @@ describe("useTranscriptStream — sendChunk", () => {
           text: "hi",
           timestamp: "2024-01-02T00:00:00.000Z",
           speakerId: "a",
+          formattedTime: "12:00:00 AM",
         },
       });
     });

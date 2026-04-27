@@ -293,7 +293,7 @@ export function AuthPage() {
         <Box sx={{ width: "100%", maxWidth: 392 }}>
 
           {/* Logo + heading */}
-          <Stack alignItems="center" spacing={1.5} sx={{ mb: 4 }}>
+          <Stack spacing={1.5} sx={{ mb: 4, alignItems: "center" }}>
             <PulseLogo />
             <Box sx={{ textAlign: "center" }}>
               <Typography
@@ -511,8 +511,7 @@ export function AuthPage() {
           <Stack
             direction="row"
             spacing={3}
-            justifyContent="center"
-            sx={{ mt: 4, pt: 3, borderTop: "1px solid #F3F4F6" }}
+            sx={{ mt: 4, pt: 3, borderTop: "1px solid #F3F4F6", justifyContent: "center" }}
           >
             {["Privacy Policy", "Terms of Service"].map((label) => (
               <Link
