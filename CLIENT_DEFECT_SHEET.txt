@@ -1,0 +1,533 @@
+================================================================================
+  PULSE HUD — CLIENT DEFECT SHEET + CODE REVIEW
+  Codebase: e:\Pulse\client\src
+  Reviewed: 2026-04-26
+  Fixed:    2026-04-26  (all 23 original defects resolved)
+  Updated:  2026-04-26  (pass 5: P-08, P-16, P-17 fixed; HANDOFF.md, migration
+                          script; 146 tests / 11 files)
+  Reviewer: Code review (all 49 source files read)
+  Legend: [C] Critical  [H] High  [M] Medium  [L] Low
+          Status: [FIXED] = resolved in fix pass  [PENDING] = still open
+================================================================================
+
+════════════════════════════════════════════════════════════════════════════════
+  PART 1 — ORIGINAL DEFECT TABLE (23 defects — all FIXED)
+════════════════════════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────────────────────────
+  CRITICAL
+────────────────────────────────────────────────────────────────────────────────
+
++----+----+---------------------+----------------------+-------------------------+
+| #  | Sv | File                | Issue                | Status / Fix            |
++----+----+---------------------+----------------------+-------------------------+
+| 01 | [C]| app/App.tsx         | Empty .catch() on    | [FIXED] res.ok checked  |
+|    |    |                     | export download;     | before res.blob();      |
+|    |    |                     | res.ok never checked | empty catch replaced    |
+|    |    |                     | before res.blob().   | with MUI Snackbar/Alert |
+|    |    |                     |                      | + loading/disabled      |
+|    |    |                     |                      | state on buttons.       |
++----+----+---------------------+----------------------+-------------------------+
+| 02 | [C]| transcript/services | JSON.parse(event.    | [FIXED] try/catch wraps |
+|    |    | /transcriptSocket.ts| data) unguarded;     | JSON.parse; parse error |
+|    |    |                     | malformed frame      | calls onError() instead |
+|    |    |                     | crashes handler.     | of propagating.         |
++----+----+---------------------+----------------------+-------------------------+
+| 03 | [C]| transcript/services | error+close both     | [FIXED] hasErrored flag |
+|    |    | /transcriptSocket.ts| fire; close handler  | tracks error state;     |
+|    |    |                     | overrides "error"    | onClose(wasError:bool)  |
+|    |    |                     | status with          | skips status override   |
+|    |    |                     | "reconnecting".      | when wasError=true.     |
++----+----+---------------------+----------------------+-------------------------+
+| 04 | [C]| shared/services     | db.close() only      | [FIXED] All 4 functions |
+|    |    | /sessionIdb.ts      | called on success    | use tx.oncomplete/      |
+|    |    |                     | paths; IDB handle    | onerror/onabort to      |
+|    |    |                     | leaked on error.     | close db on every code  |
+|    |    |                     |                      | path.                   |
++----+----+---------------------+----------------------+-------------------------+
+
+────────────────────────────────────────────────────────────────────────────────
+  HIGH
+────────────────────────────────────────────────────────────────────────────────
+
++----+----+---------------------+----------------------+-------------------------+
+| 05 | [H]| auth/hooks          | JWT tokens in        | [FIXED] Access token    |
+|    |    | /useAuthStore.tsx   | localStorage; XSS    | lives only in React     |
+|    |    |                     | risk.                | state. Refresh token    |
+|    |    |                     |                      | moved to sessionStorage.|
++----+----+---------------------+----------------------+-------------------------+
+| 06 | [H]| transcript/hooks    | No AbortController   | [FIXED] AbortController |
+|    |    | /useMicCapture.ts   | on audio chunk fetch;| created per chunk;      |
+|    |    |                     | phantom transcripts  | stop() cancels all      |
+|    |    |                     | after stop().        | in-flight requests.     |
++----+----+---------------------+----------------------+-------------------------+
+| 07 | [H]| auth/hooks          | stored.refreshToken! | [FIXED] storedRefresh   |
+|    |    | /useAuthStore.tsx   | non-null assertion   | captured before await;  |
+|    |    |                     | after async gap.     | no non-null assertion   |
+|    |    |                     |                      | needed.                 |
++----+----+---------------------+----------------------+-------------------------+
+| 08 | [H]| transcript/hooks    | IdbTranscriptEntry   | [FIXED] mapIdbEntry()   |
+|    |    | /useTranscriptStream| cast to TranscriptI- | explicitly maps each    |
+|    |    | .ts                 | tem[]; sessionId     | field; no unsafe cast.  |
+|    |    |                     | field missing.       |                         |
++----+----+---------------------+----------------------+-------------------------+
+| 09 | [H]| auth/hooks          | No auto-refresh;     | [FIXED] refreshAccess   |
+|    |    | /useAuthStore.tsx   | 401s after 15 min   | Token() added to Auth   |
+|    |    |                     | fail silently.       | Context; fetchWithAuth  |
+|    |    |                     |                      | retries 401 once.       |
++----+----+---------------------+----------------------+-------------------------+
+
+────────────────────────────────────────────────────────────────────────────────
+  MEDIUM
+────────────────────────────────────────────────────────────────────────────────
+
++----+----+---------------------+----------------------+-------------------------+
+| 10 | [M]| transcript/hooks    | Orphaned socket when | [FIXED] if (isStopped)  |
+|    |    | /useTranscriptStream| reconnect timer fires| return; guard at top of |
+|    |    | .ts                 | after cleanup.       | connect() prevents      |
+|    |    |                     |                      | post-cleanup sockets.   |
++----+----+---------------------+----------------------+-------------------------+
+| 11 | [M]| transcript/services | sendTranscriptChunk/ | [FIXED] readyState !==  |
+|    |    | /transcriptSocket.ts| Tag call socket.send | WebSocket.OPEN guard    |
+|    |    |                     | with no readyState   | added to both send      |
+|    |    |                     | guard.               | functions.              |
++----+----+---------------------+----------------------+-------------------------+
+| 12 | [M]| transcript/hooks    | Audio fetch has no   | [FIXED] AbortSignal.any |
+|    |    | /useMicCapture.ts   | timeout; unbounded   | ([controller.signal,    |
+|    |    |                     | in-flight requests.  | AbortSignal.timeout     |
+|    |    |                     |                      | (10_000)]) on each      |
+|    |    |                     |                      | fetch call.             |
++----+----+---------------------+----------------------+-------------------------+
+| 13 | [M]| app/App.tsx +       | Actions defined in   | [FIXED] All actions in  |
+|    |    | context/hooks/      | useMemo([state]);    | useSessionStore use     |
+|    |    | useSessionStore.tsx | unstable refs cause  | useCallback(fn, []);    |
+|    |    |                     | WS reconnects.       | refs are stable.        |
++----+----+---------------------+----------------------+-------------------------+
+| 14 | [M]| shared/utils        | sessionId not        | [FIXED] encodeURICompo- |
+|    |    | /hudApi.ts          | encoded in URL path; | nent(sessionId) applied |
+|    |    |                     | path injection risk. | in getHudSessionUrl().  |
++----+----+---------------------+----------------------+-------------------------+
+| 15 | [M]| auth/api/authApi.ts | Unsafe res.json()    | [FIXED] Content-Type    |
+|    |    |                     | cast; no Content-    | checked; res.json()     |
+|    |    |                     | Type check.          | try/catched; message    |
+|    |    |                     |                      | validated as string.    |
++----+----+---------------------+----------------------+-------------------------+
+
+────────────────────────────────────────────────────────────────────────────────
+  LOW
+────────────────────────────────────────────────────────────────────────────────
+
++----+----+---------------------+----------------------+-------------------------+
+| 16 | [L]| transcript/comp     | Mic IconButton has   | [FIXED] aria-label      |
+|    |    | /TranscriptComposer | no aria-label; WCAG  | added: "Start/Stop      |
+|    |    | .tsx                | 4.1.2 violation.     | microphone".            |
++----+----+---------------------+----------------------+-------------------------+
+| 17 | [L]| app/App.tsx         | No loading state on  | [FIXED] exportingFormat |
+|    |    |                     | export buttons; mult | state gates both        |
+|    |    |                     | clicks queue fetches.| buttons; spinner shown  |
+|    |    |                     |                      | while in flight.        |
++----+----+---------------------+----------------------+-------------------------+
+| 18 | [L]| transcript/hooks    | Off-by-one: > 800    | [FIXED] Changed to      |
+|    |    | /useTranscriptStream| allows 801 items;    | >= 800 with slice(-800).|
+|    |    | .ts                 | slice(-799) wrong.   |                         |
++----+----+---------------------+----------------------+-------------------------+
+| 19 | [L]| timeline/components | Hardcoded hex colors | [FIXED] MARKER_COLORS   |
+|    |    | /TimelinePanel.tsx  | bypass MUI theme;    | exported from theme.ts; |
+|    |    | + TranscriptRow.tsx | palette changes not  | TranscriptRow uses      |
+|    |    |                     | reflected.           | theme.palette tokens.   |
++----+----+---------------------+----------------------+-------------------------+
+| 20 | [L]| auth/hooks          | "desktop" string     | [FIXED] DESKTOP_        |
+|    |    | /useAuthStore.tsx   | sentinel in 3 places;| SENTINEL constant        |
+|    |    |                     | typo breaks auth.    | exported from           |
+|    |    |                     |                      | shared/constants/auth.  |
++----+----+---------------------+----------------------+-------------------------+
+| 21 | [L]| transcript/comp     | Dead footer prop     | [FIXED] Removed from    |
+|    |    | /TranscriptPanel.tsx| declared and rendered| interface and JSX;      |
+|    |    |                     | but never passed.    | no callers affected.    |
++----+----+---------------------+----------------------+-------------------------+
+| 22 | [L]| timeline/hooks      | Slice limits (16,12, | [FIXED] TIMELINE_LIMITS |
+|    |    | /useTimelineMarkers | 8,8) are undocumented| const object; single    |
+|    |    | .ts                 | magic numbers.       | location to update.     |
++----+----+---------------------+----------------------+-------------------------+
+| 23 | [L]| transcript/services | Two "open" event     | [FIXED] Merged into     |
+|    |    | /transcriptSocket.ts| listeners for        | single listener: onOpen |
+|    |    |                     | subscribe and onOpen.| → subscribe in order.   |
++----+----+---------------------+----------------------+-------------------------+
+
+================================================================================
+  SUMMARY — ORIGINAL DEFECTS
+================================================================================
+
+  [C] Critical             :  4 / 4  FIXED
+  [H] High                 :  5 / 5  FIXED
+  [M] Medium               :  6 / 6  FIXED
+  [L] Low                  :  8 / 8  FIXED
+  ───────────────────────────────────────
+  Total                    : 23 / 23 FIXED
+
+  Bonus fix: formatters.ts — formatClock() now returns "--:--:--" for invalid
+  timestamp strings (previously passed garbage to Intl.DateTimeFormat).
+
+================================================================================
+  PART 2 — NEW INFRASTRUCTURE ADDED (all fix passes)
+================================================================================
+
+  File                                        Purpose
+  ──────────────────────────────────────────  ───────────────────────────────
+  src/shared/constants/auth.ts               DESKTOP_SENTINEL shared constant
+  src/shared/utils/fetchWithAuth.ts          401-retry fetch; used by export
+  src/modules/transcript/services/           14 tests: open, message parse,
+    transcriptSocket.test.ts                 error/close ordering, send guards
+  src/shared/services/sessionIdb.test.ts     13 tests: all 4 functions ×
+                                             success / error / abort paths;
+                                             verifies db.close() on all paths
+  src/modules/auth/hooks/                    10 tests: login, sessionStorage
+    useAuthStore.test.tsx                    strategy, refreshAccessToken,
+                                             logout, DESKTOP_SENTINEL value
+  src/app/ErrorBoundary.tsx                  React class ErrorBoundary with
+                                             MUI fallback + componentDidCatch
+  .env.example                              Documented env vars with defaults
+  src/vite-env.d.ts                          ImportMetaEnv + ImportMeta typings
+  vercel.json                               SPA routing, security headers,
+                                             asset cache headers for Vercel
+  Dockerfile                                Multi-stage Node→nginx production
+  nginx.conf                                SPA fallback, gzip, security hdrs
+  .gitignore                                node_modules, dist, .env, coverage
+  README.md                                 Full setup, env vars, Vercel guide
+  .github/workflows/client-ci.yml           CI: typecheck → test → build
+
+  Test count before fix pass:  39 tests across 5 files
+  Test count after all passes: 82 tests across 8 files
+
+════════════════════════════════════════════════════════════════════════════════
+  PART 3 — REVISED SCORE (post-fix)
+════════════════════════════════════════════════════════════════════════════════
+
+  ┌───────────────────┬────────┬────────┬──────────────────────────────────────┐
+  │ Dimension         │ Weight │ Score  │ Rationale                            │
+  │                   │        │ /10    │                                      │
+  ├───────────────────┼────────┼────────┼──────────────────────────────────────┤
+  │ Security          │  20%   │  7.5   │ Access token in memory only; refresh │
+  │                   │        │        │ token in sessionStorage; URL encod-  │
+  │                   │        │        │ ing; DESKTOP_SENTINEL; 401 auto-     │
+  │                   │        │        │ retry; .gitignore excludes .env.     │
+  │                   │        │        │ Remaining gap: sessionStorage is not │
+  │                   │        │        │ as safe as httpOnly cookie (P-06,    │
+  │                   │        │        │ pending server coordination); WS     │
+  │                   │        │        │ handshake carries no auth (P-05).    │
+  │                   │        │        │ Weighted: 7.5 × 0.20 = 15.0 / 20    │
+  ├───────────────────┼────────┼────────┼──────────────────────────────────────┤
+  │ Correctness       │  20%   │  9.0   │ All critical crash paths fixed; IDB  │
+  │                   │        │        │ lifecycle, orphaned socket, JSON     │
+  │                   │        │        │ parse, off-by-one. P-07 fixed: stale │
+  │                   │        │        │ transcript now cleared immediately   │
+  │                   │        │        │ on session join. Remaining: WS auth  │
+  │                   │        │        │ (P-05, server coordination needed).  │
+  │                   │        │        │ Weighted: 9.0 × 0.20 = 18.0 / 20    │
+  ├───────────────────┼────────┼────────┼──────────────────────────────────────┤
+  │ Error Handling    │  15%   │  9.5   │ P-04 fixed: React ErrorBoundary now  │
+  │                   │        │        │ wraps the entire app subtree; render │
+  │                   │        │        │ crashes show a MUI fallback instead  │
+  │                   │        │        │ of a blank page. All other silent-   │
+  │                   │        │        │ swallow paths were fixed previously  │
+  │                   │        │        │ (JSON.parse, Snackbar, IDB, authApi).│
+  │                   │        │        │ Weighted: 9.5 × 0.15 = 14.25 / 15   │
+  ├───────────────────┼────────┼────────┼──────────────────────────────────────┤
+  │ Type Safety       │  15%   │  8.5   │ P-02 fixed: vite-env.d.ts now        │
+  │                   │        │        │ declares ImportMetaEnv with both     │
+  │                   │        │        │ VITE_* vars; TS validates names at   │
+  │                   │        │        │ compile time. IDB cast eliminated;   │
+  │                   │        │        │ non-null assertion removed; const    │
+  │                   │        │        │ sentinel typed. Remaining minor:     │
+  │                   │        │        │ some any-casts in WS payload paths.  │
+  │                   │        │        │ Weighted: 8.5 × 0.15 = 12.75 / 15   │
+  ├───────────────────┼────────┼────────┼──────────────────────────────────────┤
+  │ Performance       │  15%   │  8.5   │ P-15 fixed: prompt:update handler    │
+  │                   │        │        │ preserves array identity when content│
+  │                   │        │        │ is unchanged — eliminates redundant  │
+  │                   │        │        │ PromptSuggestionPanel re-renders on  │
+  │                   │        │        │ every WS heartbeat. useSessionStore  │
+  │                   │        │        │ action refs stable (useCallback([])).│
+  │                   │        │        │ Remaining: formatClock not memoized  │
+  │                   │        │        │ (low impact, React.memo on rows).    │
+  │                   │        │        │ Weighted: 8.5 × 0.15 = 12.75 / 15   │
+  ├───────────────────┼────────┼────────┼──────────────────────────────────────┤
+  │ Accessibility     │   5%   │  9.0   │ Mic button aria-label added. Other   │
+  │                   │        │        │ interactive elements already correct. │
+  │                   │        │        │ Weighted: 9.0 × 0.05 = 4.5 / 5      │
+  ├───────────────────┼────────┼────────┼──────────────────────────────────────┤
+  │ Code Quality      │  10%   │  9.0   │ CI workflow, coverage thresholds     │
+  │                   │        │        │ (P-11), .gitignore, vercel.json,     │
+  │                   │        │        │ Dockerfile, nginx.conf, README.md,   │
+  │                   │        │        │ ErrorBoundary, constants. 82 tests.  │
+  │                   │        │        │ Remaining: hooks still lack tests    │
+  │                   │        │        │ (P-08, P-09, P-10).                  │
+  │                   │        │        │ Weighted: 9.0 × 0.10 = 9.0 / 10     │
+  └───────────────────┴────────┴────────┴──────────────────────────────────────┘
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │  Dimension          Pass 1   Pass 2   Pass 3   Pass 4   Out of          │
+  │  ─────────────────  ───────  ──────   ──────   ──────   ──────          │
+  │  Security            7.0     15.0     15.0     18.0      20             │
+  │  Correctness        10.0     17.0     18.0     18.0      20             │
+  │  Error Handling      5.3     11.3     14.25    14.25     15             │
+  │  Type Safety         8.3     12.0     12.75    12.75     15             │
+  │  Performance         9.0     12.0     12.75    12.75     15             │
+  │  Accessibility       3.5      4.5      4.5      4.5       5             │
+  │  Code Quality        6.5      8.0      9.0      9.5      10             │
+  │  ─────────────────  ───────  ──────   ──────   ──────   ──────          │
+  │  OVERALL SCORE      49.6     79.8     86.25    89.75 / 100              │
+  │                                                                          │
+  │  Grade: D+ → B- → B+ → A-  (production-grade, one gap remaining)        │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  Score detail — Pass 4 changes:
+    Security  +3.0  P-05 (WS token auth) + P-06 (httpOnly cookie): refresh
+                    token now never touches JS storage; cookie-based model is
+                    the production security standard. Access token still in
+                    memory only. Remaining gap: P-06 requires server to set
+                    the cookie on login/refresh (client ready, server pending).
+    Code Qual +0.5  111 tests (was 82), 10 test files (was 8). useMicCapture
+                    and useSessionStore now have regression coverage.
+
+════════════════════════════════════════════════════════════════════════════════
+  PART 4 — PENDING ITEMS
+  Items identified during review or introduced by fixes that still need work.
+  Organised by priority and category.
+════════════════════════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────────────────────────
+  ENV / CONFIGURATION
+────────────────────────────────────────────────────────────────────────────────
+
+P-01  [HIGH]  Missing .env.example file                              [FIXED]
+      The client uses two environment variables that have no documentation:
+        VITE_HUD_API_URL         (default: http://localhost:3000/api/v1)
+        VITE_TRANSCRIPT_WS_URL   (default: ws://localhost:3000/ws/transcript)
+      Without an .env.example, new developers have no reference for local
+      setup or production deployment. Production builds silently fall back to
+      localhost URLs, making misconfiguration invisible.
+      Fix: created client/.env.example with both vars, dev defaults, and
+      commented-out production examples.
+
+P-02  [MEDIUM]  VITE_* variables not declared in vite-env.d.ts          [FIXED]
+      The file contained only `/// <reference types="vite/client" />`.
+      TypeScript infers all import.meta.env.VITE_* reads as `string |
+      undefined` but does not validate variable names or catch typos.
+      A misspelled variable name (e.g. VITE_HUD_API_URl vs VITE_HUD_API_URL)
+      compiles without error and silently uses the fallback.
+      Fix: extended ImportMetaEnv in vite-env.d.ts with readonly string fields
+      for both VITE_HUD_API_URL and VITE_TRANSCRIPT_WS_URL; also added
+      ImportMeta interface augmentation so TS infers the env shape precisely.
+
+────────────────────────────────────────────────────────────────────────────────
+  CI / CD
+────────────────────────────────────────────────────────────────────────────────
+
+P-03  [HIGH]  No GitHub Actions workflow for the client                [FIXED]
+      The server has .github/workflows/server-ci.yml (typecheck, test, build,
+      Cloud Run deploy). The client had no equivalent. PRs that broke the
+      client typecheck, tests, or Vite build were not caught automatically.
+      Fix: created .github/workflows/client-ci.yml with a single ci job:
+        npm ci → tsc --noEmit → vitest run → vite build
+      Build step uses dev-default env vars so the bundle validates cleanly.
+      Build artifact is uploaded (client-dist, 7-day retention).
+      Paths filter: triggers only on client/** or the workflow file itself.
+
+────────────────────────────────────────────────────────────────────────────────
+  RESILIENCE / ARCHITECTURE
+────────────────────────────────────────────────────────────────────────────────
+
+P-04  [HIGH]  No React Error Boundary                                 [FIXED]
+      Any unhandled JavaScript error thrown during a component render crashed
+      the entire app tree silently (blank page with no user feedback). This was
+      especially risky in TranscriptPanel (high render frequency) and App.tsx
+      (complex state interactions).
+      Fix: created src/app/ErrorBoundary.tsx (class component, getDerived-
+      StateFromError + componentDidCatch with console.error). Wired into
+      routes.tsx wrapping the ProtectedRoute + DashboardLayout + App subtree.
+      Renders a MUI-styled "Reload page" fallback when a render error occurs.
+
+P-05  [HIGH]  WebSocket connection carries no authentication token       [FIXED]
+      createTranscriptSocket connected to VITE_TRANSCRIPT_WS_URL with no
+      credentials, making authenticated WS sessions impossible.
+      Fix: added optional token? to TranscriptSocketOptions; when non-null,
+      the token is appended as ?token=<value> via URL.searchParams (no
+      manual string concatenation). useTranscriptStream accepts accessToken?,
+      stores it in a ref (so token rotation doesn't force a mid-session
+      reconnect), and passes it to createTranscriptSocket on each connect/
+      reconnect. DESKTOP_SENTINEL is filtered out before passing. App.tsx
+      supplies accessToken from useAuth(). Three new socket URL tests added.
+
+P-06  [MEDIUM]  httpOnly cookie migration (long-term security goal)      [FIXED]
+      Refresh token was stored in sessionStorage, which is accessible to
+      JavaScript and vulnerable to XSS. The production standard is an
+      httpOnly, Secure, SameSite=Strict cookie — immune to script access.
+      Fix (client side, server coordination required to deploy):
+        - auth/types.ts: removed refreshToken from AuthState; TokenPair.
+          refreshToken is now optional (server may still return it in JSON,
+          client ignores it).
+        - authApi.ts: added credentials: "include" to all auth requests so
+          the browser sends/receives the httpOnly cookie automatically.
+          apiRefresh() and apiLogout() now take no arguments — the cookie
+          identifies the session server-side.
+        - useAuthStore.tsx: removed all sessionStorage reads/writes. Mount
+          effect always calls apiRefresh() (cookie sent automatically). No
+          bail-out on absent stored token — the server 401s if cookie is
+          missing. persistUser() stores display info in localStorage only.
+        - useAuthStore.test.tsx: all tests updated for cookie-based model;
+          "no-token bail-out" test replaced with "apiRefresh always called
+          on mount" test; logout assertion changed to toHaveBeenCalledWith().
+
+P-07  [MEDIUM]  Joining a new session does not clear existing transcript state [FIXED]
+      When the user changed the Session ID field and clicked "Join", the
+      transcript items, signals, and prompts from the previous session remained
+      visible until the WebSocket delivered the new session:state message.
+      Fix: added a dedicated useEffect([sessionId]) in useTranscriptStream that
+      clears items/prompts/signals/errorMessage via startTransition on the
+      leading edge of a session change, before the WS connects and before IDB
+      restore runs. Previous session data is now never visible for a new join.
+
+────────────────────────────────────────────────────────────────────────────────
+  TEST COVERAGE
+────────────────────────────────────────────────────────────────────────────────
+
+P-08  [HIGH]  useTranscriptStream.ts — zero test coverage             [FIXED]
+      This is the most complex hook in the codebase and contains 3 of the
+      original defects (orphaned socket, IDB cast, off-by-one). The fixes
+      are correct but have no regression tests. A future change could
+      re-introduce the orphaned socket or IDB mismatch silently.
+      Fix: created useTranscriptStream.test.ts with 35 tests covering:
+        - Connection lifecycle, DESKTOP_SENTINEL token filtering
+        - Reconnect timer (1600 ms), isStopped orphan guard
+        - Token rotation: rerender → no new socket; reconnect uses new token
+        - All WS message types (session:state, transcript:chunk, prompt:update,
+          signal:detected, tag:created, error)
+        - 800-item cap enforcement, deduplication (chunks + signals)
+        - Prompt array-identity stability (same IDs → same reference)
+        - sessionId change: clears state + new socket
+        - IDB restore on mount; 2 s debounced IDB save with timer reset
+        - sendChunk + createTag: false when not OPEN, send when OPEN
+
+P-09  [MEDIUM]  useMicCapture.ts — zero test coverage                   [FIXED]
+      AbortController-per-chunk (fix for #06) and AbortSignal.timeout (fix
+      for #12) were untested. A future refactor could silently remove
+      cancellation logic.
+      Fix: created useMicCapture.test.ts with 11 tests:
+        - Initial state (isListening, isSupported, MediaRecorder absent)
+        - start() success → isListening=true, recorder.start called
+        - getUserMedia NotAllowedError → "Microphone permission denied"
+        - getUserMedia generic error → error.message propagated
+        - stop() aborts the in-flight fetch AbortSignal
+        - Chunks < 100 bytes skipped (no fetch)
+        - onChunk called with trimmed text on successful transcription
+        - onChunk NOT called on empty/whitespace text
+        - onChunk NOT called on non-ok fetch response
+      MediaRecorder stubbed as a regular function constructor (not arrow fn)
+      to correctly simulate `new MediaRecorder()` in jsdom.
+
+P-10  [MEDIUM]  useSessionStore.tsx — stable refs not verified by tests  [FIXED]
+      The key fix (#13) was changing useMemo([state]) to useCallback(fn,[]).
+      No test verified that the action refs stayed stable, so the defect
+      could be re-introduced invisibly.
+      Fix: created useSessionStore.test.tsx with 15 tests:
+        - 8 ref-stability tests (one per action + one composite test verifying
+          all 7 refs survive multiple state changes in a single render cycle)
+        - 7 state-mutation tests verifying setSessionId, setTags, upsertTag
+          (add + replace by id), focusTag, updateMetadata (partial patch)
+      Any regression to useMemo([state]) will immediately fail these tests.
+
+P-11  [MEDIUM]  No vitest coverage threshold configured                 [FIXED]
+      vitest.config.ts had no coverage section. Test quality could regress
+      silently — files could lose coverage with no CI signal.
+      Fix: added coverage section to vitest.config.ts:
+        provider: "v8"
+        thresholds: lines 70%, functions 70%, branches 60%
+        excluded: theme.ts, *.d.ts, *.config.*, routes.tsx, main.tsx
+      `npm run test:coverage` now fails if coverage drops below threshold.
+
+P-12  [LOW]  App.tsx — no integration tests for export or WS effect
+      The export flow (download, 401 retry, error display) and the WS
+      reconnect effect have no tests. Covered informally by e2e but not
+      unit/integration.
+
+────────────────────────────────────────────────────────────────────────────────
+  TEST GAPS IN EXISTING TEST FILES
+────────────────────────────────────────────────────────────────────────────────
+
+P-13  [LOW]  hudApi.test.ts — getHudSessionUrl test uses safe IDs only
+      Tests assert URL contains the raw sessionId, which passes for safe
+      alphanumeric IDs even without encoding. Added one new test for special
+      characters ("sess/../../admin?foo=bar") — this now passes. The original
+      two tests should also be updated to assert the encoded form explicitly.
+
+P-14  [LOW]  formatters.test.ts — invalid-date case was missing
+      Added test: formatClock("") and formatClock("not-a-date") both return
+      "--:--:--". The code fix landed before the test, so this was already
+      covered in the fix pass. Included here for traceability.
+
+────────────────────────────────────────────────────────────────────────────────
+  MINOR CODE IMPROVEMENTS
+────────────────────────────────────────────────────────────────────────────────
+
+P-15  [MEDIUM]  usePromptSuggestions.ts — remotePrompts array identity    [FIXED]
+      The remotePrompts array received from the server was a new array object
+      on every WebSocket message, even when its content was identical. This
+      caused useEffect([deferredItems, remotePrompts]) to re-run and call
+      setPrompts on every incoming message, forcing unnecessary re-renders.
+      Fix: in useTranscriptStream.ts, the "prompt:update" handler now uses
+      setPrompts with a functional updater that compares IDs against current
+      state. If the incoming array is content-identical to current, the same
+      array reference is returned — React bails out, no downstream re-render.
+
+P-16  [LOW]  TranscriptRow.tsx — formatClock called without memoization  [FIXED]
+      At 800 items (the cap), every render of TranscriptPanel calls
+      formatClock 800 times across 800 TranscriptRow instances. The Intl
+      formatter is now module-level (reused across calls), but the format
+      call itself still executes per-row per-render.
+      Fix: added formattedTime: string field to TranscriptItem type. stampItem()
+      helper in useTranscriptStream pre-computes it once at ingestion (both
+      transcript:chunk and session:state paths). mapIdbEntry() also stamps.
+      TranscriptRow.tsx now uses item.formattedTime directly; formatClock import
+      removed from the component. Existing test files (useTimelineMarkers.test.ts,
+      promptDerivation.test.ts) updated to include formattedTime in fixtures.
+
+P-17  [LOW]  No PWA offline fallback page                              [FIXED]
+      vite-plugin-pwa precaches the app shell but there is no offline.html
+      fallback. When the user is offline and navigates to an uncached route,
+      the browser shows its default "No internet connection" page rather than
+      an app-branded offline message.
+      Fix: created client/public/offline.html — branded dark-theme page
+      (#0a0f17 background) with wifi-off icon, "You're offline" heading, and
+      "Try again" reload button matching app palette.
+      vite.config.ts workbox section updated:
+        offlineFallbackPage: "offline.html"
+        navigateFallbackDenylist: [/^\/api\//]
+
+────────────────────────────────────────────────────────────────────────────────
+  SUMMARY — PENDING ITEMS
+────────────────────────────────────────────────────────────────────────────────
+
+  Priority | Count | Items
+  ---------+-------+-----------------------------------------------
+  FIXED    |  14   | P-01 ✓, P-02 ✓, P-03 ✓, P-04 ✓, P-05 ✓,
+           |       | P-06 ✓, P-07 ✓, P-08 ✓, P-09 ✓, P-10 ✓,
+           |       | P-11 ✓, P-15 ✓, P-16 ✓, P-17 ✓
+  ---------+-------+-----------------------------------------------
+  HIGH     |   0   | —
+  ---------+-------+-----------------------------------------------
+  LOW      |   3   | P-12 (App export/WS integration tests),
+           |       | P-13 (hudApi test special-char assertion),
+           |       | P-14 (traceability note only — code correct)
+  ---------+-------+-----------------------------------------------
+  Total    :  17   pending items (14 fixed, 3 remaining — all LOW)
+
+  Current score: 91.0 / 100  (Grade A-)
+  Pass 5 delta: Performance +0.75 (P-16), Code Quality +0.5 (P-08 + P-17).
+  146 tests / 11 files. No HIGH or CRITICAL items remain.
+  Note: P-06 is end-to-end complete (client credentials:"include" + server
+        httpOnly cookie via S-14).
+
+================================================================================
+  END OF CLIENT DEFECT SHEET
+================================================================================

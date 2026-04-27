@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pulse HUD — Offline</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100dvh;
+        background: #0a0f17;
+        color: #e2e8f0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        padding: 2rem;
+      }
+
+      .icon {
+        width: 56px;
+        height: 56px;
+        margin-bottom: 1.5rem;
+        opacity: 0.6;
+      }
+
+      h1 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        margin-bottom: 0.5rem;
+        color: #f1f5f9;
+      }
+
+      p {
+        font-size: 0.875rem;
+        color: #94a3b8;
+        text-align: center;
+        max-width: 320px;
+        line-height: 1.6;
+        margin-bottom: 2rem;
+      }
+
+      button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.5rem 1.25rem;
+        border-radius: 6px;
+        border: 1px solid rgba(99, 179, 237, 0.3);
+        background: rgba(99, 179, 237, 0.08);
+        color: #63b3ed;
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: background 150ms ease, border-color 150ms ease;
+      }
+
+      button:hover {
+        background: rgba(99, 179, 237, 0.16);
+        border-color: rgba(99, 179, 237, 0.5);
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      // If the device is actually online this page was served by a stale
+      // service worker (e.g. left over from a dev session).  Unregister it
+      // and reload so the real app is served.
+      if (navigator.onLine && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(regs) {
+          Promise.all(regs.map(function(r) { return r.unregister(); })).then(function() {
+            window.location.reload();
+          });
+        });
+      }
+    </script>
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round"
+        d="M18.364 5.636a9 9 0 0 1 0 12.728M5.636 5.636a9 9 0 0 0 0 12.728M9.879 9.879a3 3 0 0 1 4.243 4.243M9.879 9.879 6.05 6.05M9.879 9.879a3 3 0 0 0 4.243 4.243m0 0 3.828 3.828" />
+    </svg>
+    <h1>You're offline</h1>
+    <p>Pulse HUD couldn't reach the network. Check your connection and try again.</p>
+    <button onclick="window.location.reload()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m0 0a8 8 0 0 1 15.356 2m.062-7L20 4v5m0 0H15" />
+      </svg>
+      Try again
+    </button>
+  </body>
+</html>

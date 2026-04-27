@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+
+# Environment files — NEVER commit real values
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Vite / tooling cache
+.vite/
+*.local
+
+# Coverage
+coverage/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# PWA
+sw.js
+sw.js.map
+workbox-*.js
+workbox-*.js.map
