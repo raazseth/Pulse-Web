@@ -32,6 +32,17 @@ export function getElectronEmbeddedServerPort(): number | undefined {
 
 export function resolveHudApiBaseUrl(): string {
   const fromEnv = import.meta.env.VITE_HUD_API_URL;
+
+  // Electron `loadFile` → file:// — relative /api/v1 becomes file:///E:/api/... (broken).
+  if (typeof window !== "undefined" && window.location.protocol === "file:") {
+    const p = getElectronEmbeddedServerPort();
+    if (p) return `http://127.0.0.1:${p}/api/v1`;
+    if (typeof fromEnv === "string" && fromEnv.trim().startsWith("http")) {
+      return trimTrailingSlash(fromEnv.trim());
+    }
+    return `${CLOUD_RUN_ORIGIN}/api/v1`;
+  }
+
   if (typeof fromEnv === "string" && fromEnv.trim()) {
     return trimTrailingSlash(fromEnv.trim());
   }
@@ -39,12 +50,12 @@ export function resolveHudApiBaseUrl(): string {
   const mode = inferMode();
   if (mode === "local") {
     const p = getElectronEmbeddedServerPort();
-    if (p) return `http://localhost:${p}/api/v1`;
+    if (p) return `http://127.0.0.1:${p}/api/v1`;
     return "http://localhost:3000/api/v1";
   }
 
   if (mode === "production") {
-    // Vercel (or any same-origin host): vercel.json rewrites /api/* → Cloud Run so auth cookies stay first-party.
+    // Vercel (or any same-origin https host): vercel.json rewrites /api/* → Cloud Run.
     return "/api/v1";
   }
 
@@ -57,10 +68,16 @@ export function resolveTranscriptWsUrl(): string {
     return trimTrailingSlash(fromEnv.trim());
   }
 
+  if (typeof window !== "undefined" && window.location.protocol === "file:") {
+    const p = getElectronEmbeddedServerPort();
+    if (p) return `ws://127.0.0.1:${p}/ws/transcript`;
+    return `${toWebSocketOrigin(CLOUD_RUN_ORIGIN)}/ws/transcript`;
+  }
+
   const mode = inferMode();
   if (mode === "local") {
     const p = getElectronEmbeddedServerPort();
-    if (p) return `ws://localhost:${p}/ws/transcript`;
+    if (p) return `ws://127.0.0.1:${p}/ws/transcript`;
     return "ws://localhost:3000/ws/transcript";
   }
 
