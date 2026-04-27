@@ -1,14 +1,21 @@
 import { FormEvent, useEffect, useState, useCallback } from "react";
 import {
+  alpha,
+  Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  InputAdornment,
   Stack,
   TextField,
   Typography,
+  useTheme,
 } from "@mui/material";
+import RecordVoiceOverOutlinedIcon from "@mui/icons-material/RecordVoiceOverOutlined";
+import { SPEAKER_PRESETS } from "@/modules/transcript/constants/speakerPresets";
 
 export interface OverlayChunkDialogProps {
   open: boolean;
@@ -25,6 +32,7 @@ export function OverlayChunkDialog({
   onSendChunk,
   getDefaultSpeakerId,
 }: OverlayChunkDialogProps) {
+  const theme = useTheme();
   const [speakerId, setSpeakerId] = useState("interviewer");
   const [text, setText] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
@@ -68,35 +76,88 @@ export function OverlayChunkDialog({
         },
       }}
     >
-      <DialogTitle sx={{ pb: 0.5, fontWeight: 700 }}>Send transcript chunk</DialogTitle>
+      <DialogTitle sx={{ pb: 0.5, fontWeight: 700 }}>Transcript composer</DialogTitle>
       <DialogContent>
-        <Stack component="form" id="overlay-chunk-form" spacing={2} sx={{ pt: 1 }} onSubmit={handleSubmit}>
+        <Stack component="form" id="overlay-chunk-form" spacing={2.5} sx={{ pt: 1 }} onSubmit={handleSubmit}>
           {disabled ? (
             <Typography variant="body2" color="text.secondary">
               Connect to the live session first, then you can push text the same way as the main composer.
             </Typography>
           ) : null}
-          <TextField
-            label="Speaker"
-            size="small"
-            fullWidth
-            value={speakerId}
-            onChange={(ev) => setSpeakerId(ev.target.value)}
-            disabled={disabled}
-          />
-          <TextField
-            label="Transcript text"
-            size="small"
-            fullWidth
-            multiline
-            minRows={4}
-            value={text}
-            onChange={(ev) => setText(ev.target.value)}
-            disabled={disabled}
-            placeholder="Type what was said…"
-            error={Boolean(sendError)}
-            helperText={sendError ?? undefined}
-          />
+          <Stack spacing={1.25}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+              Speaker
+            </Typography>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ xs: "stretch", sm: "center" }}>
+              <TextField
+                size="small"
+                label="ID or label"
+                placeholder="e.g. interviewer"
+                fullWidth
+                value={speakerId}
+                onChange={(ev) => setSpeakerId(ev.target.value)}
+                disabled={disabled}
+                sx={{
+                  flex: { sm: "0 1 280px" },
+                  maxWidth: { sm: 320 },
+                  "& .MuiOutlinedInput-root": { borderRadius: "10px" },
+                }}
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <RecordVoiceOverOutlinedIcon sx={{ fontSize: "1.2rem", color: "text.disabled" }} />
+                      </InputAdornment>
+                    ),
+                  },
+                }}
+              />
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
+                {SPEAKER_PRESETS.map((preset) => {
+                  const selected = speakerId.trim().toLowerCase() === preset;
+                  return (
+                    <Chip
+                      key={preset}
+                      label={preset}
+                      size="small"
+                      disabled={disabled}
+                      onClick={() => setSpeakerId(preset)}
+                      variant={selected ? "filled" : "outlined"}
+                      color={selected ? "primary" : "default"}
+                      sx={{
+                        height: 32,
+                        textTransform: "capitalize",
+                        fontWeight: 600,
+                        ...(!selected && {
+                          borderColor: alpha(theme.palette.grey[500], 0.28),
+                          bgcolor: alpha(theme.palette.common.white, 0.55),
+                        }),
+                      }}
+                    />
+                  );
+                })}
+              </Box>
+            </Stack>
+          </Stack>
+          <Stack spacing={0.75}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+              Line to send
+            </Typography>
+            <TextField
+              size="small"
+              fullWidth
+              multiline
+              minRows={4}
+              value={text}
+              onChange={(ev) => setText(ev.target.value)}
+              disabled={disabled}
+              placeholder="Type what was said…"
+              aria-label="Transcript line to send"
+              error={Boolean(sendError)}
+              helperText={sendError ?? undefined}
+              sx={{ "& .MuiOutlinedInput-root": { borderRadius: "12px" } }}
+            />
+          </Stack>
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
@@ -110,7 +171,7 @@ export function OverlayChunkDialog({
           disabled={disabled || !text.trim()}
           sx={{ borderRadius: "10px" }}
         >
-          Send chunk
+          Send
         </Button>
       </DialogActions>
     </Dialog>

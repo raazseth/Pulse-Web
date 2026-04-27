@@ -11,7 +11,7 @@ import { useSessionStore } from "@/modules/context/hooks/useSessionStore";
 import { useHudContextApi } from "@/modules/context/hooks/useHudContextApi";
 import { useNoteApi } from "@/modules/context/hooks/useNoteApi";
 import { useNoteTagApi } from "@/modules/context/hooks/useNoteTagApi";
-import { useSessionList } from "@/modules/context/hooks/useSessionList";
+import { useSessionList, type SessionSummary } from "@/modules/context/hooks/useSessionList";
 import { PromptSuggestionPanel } from "@/modules/prompts/components/PromptSuggestionPanel";
 import { usePromptSuggestions } from "@/modules/prompts/hooks/usePromptSuggestions";
 import { TagPanel } from "@/modules/tagging/components/TagPanel";
@@ -36,6 +36,10 @@ import { singleFlightByKey } from "@/shared/utils/singleFlightByKey";
 import { SessionNote } from "@/modules/context/types";
 import { TranscriptSocketTag } from "@/modules/transcript/types";
 import { TranscriptSessionState } from "@/modules/transcript/types";
+
+function pickPreferredServerSession(list: SessionSummary[]): SessionSummary {
+  return list.find((s) => s.status === "active") ?? list[0];
+}
 
 function mapRemoteTag(tag: {
   id: string;
@@ -347,12 +351,20 @@ export function App() {
   const sessionList = useSessionList();
   const listPrevLoadingRef = useRef<boolean | undefined>(undefined);
   const emptyListBootstrapAttemptedRef = useRef(false);
+  const sessionBootstrapTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!accessToken) {
+    if (!accessToken || accessToken === DESKTOP_SENTINEL) {
       listPrevLoadingRef.current = undefined;
       emptyListBootstrapAttemptedRef.current = false;
+      sessionBootstrapTokenRef.current = null;
       return;
+    }
+
+    if (sessionBootstrapTokenRef.current !== accessToken) {
+      sessionBootstrapTokenRef.current = accessToken;
+      listPrevLoadingRef.current = undefined;
+      emptyListBootstrapAttemptedRef.current = false;
     }
 
     const prevLoading = listPrevLoadingRef.current;
@@ -368,6 +380,10 @@ export function App() {
     }
 
     const list = sessionList.sessions;
+    if (!sessionList.listLoadSucceeded) {
+      return;
+    }
+
     if (list.length === 0) {
       if (emptyListBootstrapAttemptedRef.current) {
         return;
@@ -395,16 +411,17 @@ export function App() {
     emptyListBootstrapAttemptedRef.current = false;
     const current = list.find((s) => s.id === session.sessionId);
     if (!current) {
-      const latest = list[0];
-      session.setSessionId(latest.id);
-      session.updateMetadata({ title: latest.title });
-      session.setSessionStatus(latest.status);
+      const preferred = pickPreferredServerSession(list);
+      session.setSessionId(preferred.id);
+      session.updateMetadata({ title: preferred.title });
+      session.setSessionStatus(preferred.status);
     } else {
       session.setSessionStatus(current.status);
     }
   }, [
     accessToken,
     sessionList.loading,
+    sessionList.listLoadSucceeded,
     sessionList.sessions,
     session.sessionId,
     session.metadata.title,

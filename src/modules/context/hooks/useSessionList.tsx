@@ -11,6 +11,7 @@ import { useAuth } from "@/modules/auth/hooks/useAuthStore";
 import { fetchWithAuth } from "@/shared/utils/fetchWithAuth";
 import { getHudSessionsUrl, getHudSessionUrl, getHudSessionStatusUrl } from "@/shared/utils/hudApi";
 import { SessionStatus } from "@/modules/context/types";
+import { DESKTOP_SENTINEL } from "@/shared/constants/auth";
 
 export interface SessionSummary {
   id: string;
@@ -30,6 +31,8 @@ export interface CreateSessionPayload {
 interface SessionListContextValue {
   sessions: SessionSummary[];
   loading: boolean;
+  /** True only after a successful GET /sessions for the current access token (not failed/401). */
+  listLoadSucceeded: boolean;
   refetch: () => Promise<void>;
   createSession: (payload: CreateSessionPayload) => Promise<SessionSummary>;
   getSession: (id: string) => Promise<SessionSummary | null>;
@@ -39,30 +42,60 @@ interface SessionListContextValue {
 
 const Ctx = createContext<SessionListContextValue | null>(null);
 
+function canListSessionsWithToken(accessToken: string | null): accessToken is string {
+  return Boolean(accessToken && accessToken !== DESKTOP_SENTINEL);
+}
+
 export function SessionListProvider({ children }: PropsWithChildren) {
   const { accessToken, refreshAccessToken } = useAuth();
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loading, setLoading] = useState(false);
+  const [listLoadSucceeded, setListLoadSucceeded] = useState(false);
   const getToken = useCallback(() => accessToken, [accessToken]);
-  const didFetch = useRef(false);
 
   const refetch = useCallback(async () => {
+    if (!canListSessionsWithToken(accessToken)) {
+      setSessions([]);
+      setListLoadSucceeded(false);
+      setLoading(false);
+      return;
+    }
+    const tokenAtStart = accessToken;
     setLoading(true);
+    setListLoadSucceeded(false);
     try {
       const res = await fetchWithAuth(getHudSessionsUrl(), {}, getToken, refreshAccessToken);
-      if (!res.ok) return;
+      if (getToken() !== tokenAtStart) {
+        return;
+      }
+      if (!res.ok) {
+        return;
+      }
       const json = await res.json() as { data?: SessionSummary[] };
       setSessions(json.data ?? []);
+      setListLoadSucceeded(true);
     } finally {
       setLoading(false);
     }
-  }, [getToken, refreshAccessToken]);
+  }, [accessToken, getToken, refreshAccessToken]);
+
+  const lastSessionFetchToken = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!accessToken || didFetch.current) return;
-    didFetch.current = true;
-    setLoading(true);
-    refetch().catch(() => {});
+    if (!canListSessionsWithToken(accessToken)) {
+      lastSessionFetchToken.current = null;
+      setSessions([]);
+      setListLoadSucceeded(false);
+      return;
+    }
+    if (lastSessionFetchToken.current !== accessToken) {
+      lastSessionFetchToken.current = accessToken;
+      setSessions([]);
+      setListLoadSucceeded(false);
+    }
+    refetch().catch(() => {
+      setListLoadSucceeded(false);
+    });
   }, [accessToken, refetch]);
 
   const createSession = useCallback(
@@ -130,7 +163,18 @@ export function SessionListProvider({ children }: PropsWithChildren) {
   );
 
   return (
-    <Ctx.Provider value={{ sessions, loading, refetch, createSession, getSession, updateSessionStatus, deleteSession }}>
+    <Ctx.Provider
+      value={{
+        sessions,
+        loading,
+        listLoadSucceeded,
+        refetch,
+        createSession,
+        getSession,
+        updateSessionStatus,
+        deleteSession,
+      }}
+    >
       {children}
     </Ctx.Provider>
   );

@@ -23,8 +23,7 @@ import { SectionHeader } from "@/shared/components/SectionHeader";
 import type { useMicCapture } from "@/modules/transcript/hooks/useMicCapture";
 import type { BrowserFirstVoiceControls } from "@/modules/transcript/hooks/useBrowserFirstVoice";
 import { isBrowserSpeechRecognitionSupported } from "@/modules/transcript/utils/browserSpeechRecognition";
-
-const SPEAKER_PRESETS = ["interviewer", "participant", "observer"] as const;
+import { SPEAKER_PRESETS } from "@/modules/transcript/constants/speakerPresets";
 
 const SECTION_LABEL_SX = {
   fontWeight: 700,

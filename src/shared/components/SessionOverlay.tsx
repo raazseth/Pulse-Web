@@ -249,7 +249,7 @@ export function SessionOverlay({
 
               <OvBtn
                 variant="teal"
-                ariaLabel="Send transcript chunk"
+                ariaLabel="Open transcript composer"
                 onClick={handleOpenChunk}
                 active={chunkDialogOpen}
                 size={40}

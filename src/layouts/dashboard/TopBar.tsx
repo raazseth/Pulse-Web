@@ -18,6 +18,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import ChevronRightRoundedIcon from "@mui/icons-material/ChevronRightRounded";
 import MenuRoundedIcon from "@mui/icons-material/MenuRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
@@ -42,6 +43,8 @@ interface TopBarProps {
   sidebarWidth: number;
   topbarHeight: number;
   onMenuClick: () => void;
+  desktopSidebarCollapsed?: boolean;
+  onExpandDesktopSidebar?: () => void;
 }
 
 function initials(name: string) {
@@ -428,7 +431,13 @@ function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void 
 
 // ─── TopBar ───────────────────────────────────────────────────────────────────
 
-export function TopBar({ sidebarWidth, topbarHeight, onMenuClick }: TopBarProps) {
+export function TopBar({
+  sidebarWidth,
+  topbarHeight,
+  onMenuClick,
+  desktopSidebarCollapsed,
+  onExpandDesktopSidebar,
+}: TopBarProps) {
   const session = useSessionStore();
   const { createSession, updateSessionStatus } = useSessionList();
   const navigate = useNavigate();
@@ -478,6 +487,11 @@ export function TopBar({ sidebarWidth, topbarHeight, onMenuClick }: TopBarProps)
           width: { lg: `calc(100% - ${sidebarWidth}px)` },
           ml: { lg: `${sidebarWidth}px` },
           height: topbarHeight,
+          transition: (theme) =>
+            theme.transitions.create(["margin", "width"], {
+              easing: theme.transitions.easing.sharp,
+              duration: theme.transitions.duration.enteringScreen,
+            }),
         }}
       >
         <Toolbar sx={{ height: topbarHeight, minHeight: `${topbarHeight}px !important`, px: { xs: 2, lg: 3 } }}>
@@ -490,6 +504,30 @@ export function TopBar({ sidebarWidth, topbarHeight, onMenuClick }: TopBarProps)
           >
             <MenuRoundedIcon />
           </IconButton>
+
+          {desktopSidebarCollapsed && onExpandDesktopSidebar && (
+            <Tooltip title="Show sidebar" placement="bottom">
+              <IconButton
+                onClick={onExpandDesktopSidebar}
+                edge="start"
+                size="small"
+                aria-label="Show sidebar"
+                sx={{
+                  mr: 1.5,
+                  display: { xs: "none", lg: "inline-flex" },
+                  color: "text.secondary",
+                  flexShrink: 0,
+                  border: "1px solid",
+                  borderColor: "divider",
+                  bgcolor: "grey.50",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+                  "&:hover": { bgcolor: "rgba(20,159,119,0.08)", color: "#149F77", borderColor: "rgba(20,159,119,0.25)" },
+                }}
+              >
+                <ChevronRightRoundedIcon sx={{ fontSize: "1.25rem" }} />
+              </IconButton>
+            </Tooltip>
+          )}
 
           <Box
             sx={{

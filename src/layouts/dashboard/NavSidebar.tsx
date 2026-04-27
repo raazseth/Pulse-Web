@@ -13,6 +13,7 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
+import ChevronLeftRoundedIcon from "@mui/icons-material/ChevronLeftRounded";
 import DashboardRoundedIcon from "@mui/icons-material/DashboardRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
 import FolderOpenRoundedIcon from "@mui/icons-material/FolderOpenRounded";
@@ -151,6 +152,17 @@ function FieldBlock({ label, value }: { label: string; value: string }) {
   );
 }
 
+const SIDEBAR_TRANSITION_MS = 225;
+
+const headerToggleFabSx = {
+  flexShrink: 0,
+  bgcolor: "rgba(0,0,0,0.22)",
+  border: "1px solid rgba(255,255,255,0.12)",
+  color: T2,
+  boxShadow: "0 6px 18px rgba(0,0,0,0.2)",
+  "&:hover": { bgcolor: "rgba(20,159,119,0.22)", color: "#fff", borderColor: "rgba(20,159,119,0.35)" },
+} as const;
+
 function NavItem({ icon, label, active, badge }: { icon: React.ReactNode; label: string; active?: boolean; badge?: string | number }) {
   return (
     <Box
@@ -240,7 +252,18 @@ function SessionRow({
 
 // ─── Sidebar content ──────────────────────────────────────────────────────────
 
-function SidebarContent({ topbarHeight, onClose }: { topbarHeight: number; onClose?: () => void }) {
+function SidebarContent({
+  topbarHeight,
+  onClose,
+  desktopShowCollapse,
+  onDesktopCollapse,
+}: {
+  topbarHeight: number;
+  onClose?: () => void;
+  /** lg+ docked sidebar: show hide control in the Pulse HUD header row */
+  desktopShowCollapse?: boolean;
+  onDesktopCollapse?: () => void;
+}) {
   const { user, logout, accessToken, refreshAccessToken } = useAuth();
   const session = useSessionStore();
   const navigate = useNavigate();
@@ -290,21 +313,53 @@ function SidebarContent({ topbarHeight, onClose }: { topbarHeight: number; onClo
   return (
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column", bgcolor: "secondary.main", borderRight: `1px solid rgba(0,0,0,0.18)` }}>
 
-      {/* ── Logo ── */}
-      <Box sx={{ height: topbarHeight, px: 2.5, display: "flex", alignItems: "center", flexShrink: 0, borderBottom: `1px solid ${BORDER}`, gap: 1.5 }}>
-        <Box sx={{ width: 34, height: 34, borderRadius: "10px", bgcolor: BRAND, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <path d="M3 12h3l3-8 4 16 3-10 2 2h3" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+      {/* ── Logo + Pulse HUD; collapse control floats at row end (desktop only) ── */}
+      <Box
+        sx={{
+          height: topbarHeight,
+          px: 2.5,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 1.5,
+          flexShrink: 0,
+          borderBottom: `1px solid ${BORDER}`,
+          minWidth: 0,
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 0, flex: 1 }}>
+          <Box sx={{ width: 34, height: 34, borderRadius: "10px", bgcolor: BRAND, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M3 12h3l3-8 4 16 3-10 2 2h3" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </Box>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography sx={{ fontWeight: 800, fontSize: "1rem", color: "#fff", letterSpacing: "-0.025em", lineHeight: 1.1 }}>
+              Pulse HUD
+            </Typography>
+            <Typography sx={{ fontSize: "0.625rem", color: T3, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+              Research Assistant
+            </Typography>
+          </Box>
         </Box>
-        <Box>
-          <Typography sx={{ fontWeight: 800, fontSize: "1rem", color: "#fff", letterSpacing: "-0.025em", lineHeight: 1.1 }}>
-            Pulse HUD
-          </Typography>
-          <Typography sx={{ fontSize: "0.625rem", color: T3, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" }}>
-            Research Assistant
-          </Typography>
-        </Box>
+        {desktopShowCollapse && onDesktopCollapse && (
+          <Tooltip title="Hide sidebar" placement="left" arrow>
+            <IconButton
+              size="small"
+              onClick={onDesktopCollapse}
+              aria-label="Hide sidebar"
+              sx={{
+                ...headerToggleFabSx,
+                borderRadius: "999px",
+                width: 40,
+                height: 40,
+                display: { xs: "none", lg: "inline-flex" },
+              }}
+            >
+              <ChevronLeftRoundedIcon sx={{ fontSize: "1.35rem" }} />
+            </IconButton>
+          </Tooltip>
+        )}
       </Box>
 
       {/* ── Body ── */}
@@ -510,9 +565,19 @@ interface NavSidebarProps {
   topbarHeight: number;
   open: boolean;
   onClose: () => void;
+  /** lg+ only: whether the docked sidebar strip is visible */
+  desktopExpanded: boolean;
+  onDesktopExpandedChange: (expanded: boolean) => void;
 }
 
-export function NavSidebar({ width, topbarHeight, open, onClose }: NavSidebarProps) {
+export function NavSidebar({
+  width,
+  topbarHeight,
+  open,
+  onClose,
+  desktopExpanded,
+  onDesktopExpandedChange,
+}: NavSidebarProps) {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up("lg"));
 
@@ -520,9 +585,30 @@ export function NavSidebar({ width, topbarHeight, open, onClose }: NavSidebarPro
 
   if (isDesktop) {
     return (
-      <Drawer variant="permanent" sx={{ width, flexShrink: 0 }} slotProps={{ paper: { sx: paperSx } }}>
-        <SidebarContent topbarHeight={topbarHeight} />
-      </Drawer>
+      <>
+        <Box
+          sx={{
+            width: desktopExpanded ? width : 0,
+            flexShrink: 0,
+            alignSelf: "flex-start",
+            position: "sticky",
+            top: 0,
+            height: "100vh",
+            maxHeight: "100vh",
+            overflow: "hidden",
+            transition: `width ${SIDEBAR_TRANSITION_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`,
+            willChange: "width",
+          }}
+        >
+          <Box sx={{ width, height: "100%", minHeight: "100%" }}>
+            <SidebarContent
+              topbarHeight={topbarHeight}
+              desktopShowCollapse={desktopExpanded}
+              onDesktopCollapse={() => onDesktopExpandedChange(false)}
+            />
+          </Box>
+        </Box>
+      </>
     );
   }
 
