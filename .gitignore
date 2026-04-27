@@ -26,6 +26,7 @@ coverage/
 *.swo
 .DS_Store
 Thumbs.db
+*.txt
 
 # PWA
 sw.js
