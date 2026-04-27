@@ -43,6 +43,11 @@ export function resolveHudApiBaseUrl(): string {
     return "http://localhost:3000/api/v1";
   }
 
+  if (mode === "production") {
+    // Vercel (or any same-origin host): vercel.json rewrites /api/* → Cloud Run so auth cookies stay first-party.
+    return "/api/v1";
+  }
+
   return `${CLOUD_RUN_ORIGIN}/api/v1`;
 }
 

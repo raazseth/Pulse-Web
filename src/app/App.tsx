@@ -32,6 +32,7 @@ import { useAuth } from "@/modules/auth/hooks/useAuthStore";
 import { defaultTagOptions } from "@/modules/tagging/services/taggingStorage";
 import { transcriptLineHasCatalogTag } from "@/modules/tagging/utils/transcriptTagDedupe";
 import { SessionOverlay } from "@/shared/components/SessionOverlay";
+import { singleFlightByKey } from "@/shared/utils/singleFlightByKey";
 import { SessionNote } from "@/modules/context/types";
 import { TranscriptSocketTag } from "@/modules/transcript/types";
 import { TranscriptSessionState } from "@/modules/transcript/types";
@@ -59,9 +60,7 @@ export function App() {
   const { accessToken, refreshAccessToken } = useAuth();
   const { setHudSocketStatus } = useTranscriptHud();
   const speakerIdRef = useRef("interviewer");
-  /** When false, voice only fills the line; use Send to feed manually (Auto-Fill off in composer). */
   const [voiceAutoSend, setVoiceAutoSend] = useState(true);
-  /** Lifted so server/browser voice and the "Line to send" field share one source of truth. */
   const [composerLine, setComposerLine] = useState("");
   const session = useSessionStore();
   const runtimeApiConfig = useMemo(() => getRuntimeApiConfig(), []);
@@ -374,13 +373,14 @@ export function App() {
         return;
       }
       emptyListBootstrapAttemptedRef.current = true;
-      sessionList
-        .createSession({
-          title: session.metadata.title,
-          facilitator: session.metadata.facilitator,
-          audience: session.metadata.audience,
-          role: session.metadata.role,
-        })
+      const payload = {
+        title: session.metadata.title,
+        facilitator: session.metadata.facilitator,
+        audience: session.metadata.audience,
+        role: session.metadata.role,
+      };
+      // Strict Mode remounts reset refs; single-flight ensures only one POST runs per token.
+      singleFlightByKey(`hud:auto-session:${accessToken}`, () => sessionList.createSession(payload))
         .then((created) => {
           if (created?.id) session.setSessionId(created.id);
           if (created?.title) session.updateMetadata({ title: created.title });

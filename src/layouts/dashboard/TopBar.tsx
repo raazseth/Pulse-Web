@@ -429,7 +429,6 @@ function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void 
 // ─── TopBar ───────────────────────────────────────────────────────────────────
 
 export function TopBar({ sidebarWidth, topbarHeight, onMenuClick }: TopBarProps) {
-  const { user, logout } = useAuth();
   const session = useSessionStore();
   const { createSession, updateSessionStatus } = useSessionList();
   const navigate = useNavigate();
@@ -468,18 +467,14 @@ export function TopBar({ sidebarWidth, topbarHeight, onMenuClick }: TopBarProps)
     }
   };
 
-  const handleLogout = async () => {
-    await logout();
-    navigate("/login");
-  };
-
   return (
     <>
       <AppBar
         position="fixed"
         elevation={0}
         sx={{
-          zIndex: (theme) => theme.zIndex.drawer + 1,
+          // Stay below temporary Drawer (zIndex.drawer) so the mobile nav is not covered by the bar.
+          zIndex: (theme) => theme.zIndex.appBar,
           width: { lg: `calc(100% - ${sidebarWidth}px)` },
           ml: { lg: `${sidebarWidth}px` },
           height: topbarHeight,
@@ -498,40 +493,52 @@ export function TopBar({ sidebarWidth, topbarHeight, onMenuClick }: TopBarProps)
 
           <Box
             sx={{
-              display: { xs: "flex", lg: "none" },
+              display: "flex",
               alignItems: "center",
-              gap: 1.25,
+              gap: { xs: 0.75, lg: 1 },
               minWidth: 0,
+              flex: 1,
+              overflow: "hidden",
             }}
           >
             <Typography
               sx={{
-                fontWeight: 800,
-                fontSize: "1rem",
-                letterSpacing: "-0.025em",
-                color: "text.primary",
-                lineHeight: 1.2,
+                display: { xs: "none", lg: "inline" },
+                fontSize: "0.75rem",
+                color: "text.disabled",
+                fontWeight: 500,
+                flexShrink: 0,
               }}
             >
-              Pulse HUD
-            </Typography>
-            {hudSocketStatus === "connected" ? <LiveDot /> : null}
-          </Box>
-
-          <Box sx={{ display: { xs: "none", lg: "flex" }, alignItems: "center", gap: 1, minWidth: 0 }}>
-            <Typography sx={{ fontSize: "0.75rem", color: "text.disabled", fontWeight: 500 }}>
               Workspace
             </Typography>
-            <Typography sx={{ fontSize: "0.75rem", color: "text.disabled" }}>/</Typography>
-            <Typography sx={{ fontSize: "0.875rem", fontWeight: 600, color: "text.primary" }}>
+            <Typography
+              sx={{
+                display: { xs: "none", lg: "inline" },
+                fontSize: "0.75rem",
+                color: "text.disabled",
+                flexShrink: 0,
+              }}
+            >
+              /
+            </Typography>
+            <Typography
+              sx={{
+                fontSize: { xs: "0.8125rem", lg: "0.875rem" },
+                fontWeight: 600,
+                color: "text.primary",
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
               Session HUD
             </Typography>
             {hudSocketStatus === "connected" ? <LiveDot /> : null}
           </Box>
 
-          <Box sx={{ flexGrow: 1 }} />
-
-          <Stack direction="row" spacing={0.5} sx={{ display: { xs: "none", lg: "flex" }, alignItems: "center" }}>
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", flexShrink: 0 }}>
             <Tooltip title="New Session" placement="bottom">
               <IconButton
                 size="small"
@@ -551,19 +558,6 @@ export function TopBar({ sidebarWidth, topbarHeight, onMenuClick }: TopBarProps)
               </IconButton>
             </Tooltip>
           </Stack>
-
-          {user && (
-            <Stack direction="row" spacing={0.75} sx={{ display: { lg: "none" }, alignItems: "center" }}>
-              <Avatar sx={{ width: 30, height: 30, bgcolor: "#149F77", fontSize: "0.6875rem", fontWeight: 700, color: "#fff" }}>
-                {initials(user.name)}
-              </Avatar>
-              <Tooltip title="Sign out">
-                <IconButton size="small" onClick={handleLogout} aria-label="sign out" sx={{ color: "text.disabled" }}>
-                  <LogoutRoundedIcon sx={{ fontSize: "1.1rem" }} />
-                </IconButton>
-              </Tooltip>
-            </Stack>
-          )}
         </Toolbar>
       </AppBar>
 

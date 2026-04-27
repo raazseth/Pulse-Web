@@ -4,6 +4,16 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 export default defineConfig({
     base: "./",
+    server: {
+        proxy: {
+            "/api": { target: "http://127.0.0.1:3000", changeOrigin: true },
+        },
+    },
+    preview: {
+        proxy: {
+            "/api": { target: "http://127.0.0.1:3000", changeOrigin: true },
+        },
+    },
     resolve: {
         alias: { "@": path.resolve(__dirname, "./src") },
     },
