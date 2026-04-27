@@ -88,7 +88,14 @@ export function OverlayChunkDialog({
             <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
               Speaker
             </Typography>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ xs: "stretch", sm: "center" }}>
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: { xs: "column", sm: "row" },
+                gap: 1.5,
+                alignItems: { xs: "stretch", sm: "center" },
+              }}
+            >
               <TextField
                 size="small"
                 label="ID or label"
@@ -137,7 +144,7 @@ export function OverlayChunkDialog({
                   );
                 })}
               </Box>
-            </Stack>
+            </Box>
           </Stack>
           <Stack spacing={0.75}>
             <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
