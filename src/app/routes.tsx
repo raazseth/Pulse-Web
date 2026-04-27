@@ -28,7 +28,8 @@ const routeObjects = [
 ];
 
 function useHashRouterForFileProtocol(): boolean {
-  return typeof window !== "undefined" && window.location.protocol === "file:";
+  if (typeof window === "undefined") return false;
+  return window.location.protocol === "file:" || window.location.href.startsWith("file:");
 }
 
 /** Hash routes when served from `file://` (Electron `loadFile`), so paths are not drive letters. */

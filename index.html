@@ -16,6 +16,15 @@
     <title>Pulse HUD</title>
   </head>
   <body>
+    <script>
+      (function () {
+        if (typeof location === "undefined") return;
+        if (location.protocol !== "file:") return;
+        if (location.hash && location.hash !== "#") return;
+        var base = location.href.split("#")[0];
+        location.replace(base + "#/");
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

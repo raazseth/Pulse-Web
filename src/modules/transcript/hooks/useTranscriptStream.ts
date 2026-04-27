@@ -29,8 +29,6 @@ import {
 import { formatClock } from "@/shared/utils/formatters";
 import { resolveTranscriptWsUrl } from "@/shared/utils/hudApiBaseUrl";
 
-const WS_URL = resolveTranscriptWsUrl();
-
 const MAX_ITEMS = 800;
 
 function capBeforeAppend<T>(items: T[]): T[] {
@@ -178,7 +176,7 @@ export function useTranscriptStream({
 
       const token = accessTokenRef.current;
       const socket = createTranscriptSocket({
-        url: WS_URL,
+        url: resolveTranscriptWsUrl(),
         sessionId,
         token: token === DESKTOP_SENTINEL ? null : token,
         onOpen: () => setStatus("connected"),

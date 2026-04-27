@@ -30,11 +30,17 @@ export function getElectronEmbeddedServerPort(): number | undefined {
   return typeof p === "number" && Number.isFinite(p) && p > 0 ? p : undefined;
 }
 
+function isFileDocument(): boolean {
+  if (typeof window === "undefined") return false;
+  const { protocol, href } = window.location;
+  return protocol === "file:" || href.startsWith("file:");
+}
+
 export function resolveHudApiBaseUrl(): string {
   const fromEnv = import.meta.env.VITE_HUD_API_URL;
 
   // Electron `loadFile` → file:// — relative /api/v1 becomes file:///E:/api/... (broken).
-  if (typeof window !== "undefined" && window.location.protocol === "file:") {
+  if (isFileDocument()) {
     const p = getElectronEmbeddedServerPort();
     if (p) return `http://127.0.0.1:${p}/api/v1`;
     if (typeof fromEnv === "string" && fromEnv.trim().startsWith("http")) {
@@ -68,7 +74,7 @@ export function resolveTranscriptWsUrl(): string {
     return trimTrailingSlash(fromEnv.trim());
   }
 
-  if (typeof window !== "undefined" && window.location.protocol === "file:") {
+  if (isFileDocument()) {
     const p = getElectronEmbeddedServerPort();
     if (p) return `ws://127.0.0.1:${p}/ws/transcript`;
     return `${toWebSocketOrigin(CLOUD_RUN_ORIGIN)}/ws/transcript`;

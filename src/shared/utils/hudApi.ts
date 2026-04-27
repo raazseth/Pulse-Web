@@ -1,9 +1,12 @@
 import { DESKTOP_SENTINEL } from "@/shared/constants/auth";
 import { resolveHudApiBaseUrl } from "@/shared/utils/hudApiBaseUrl";
 
-const API_BASE_URL = resolveHudApiBaseUrl();
+/** Resolve at call time — required for Electron `file://` + `window.api.serverPort`. */
+function apiBase(): string {
+  return resolveHudApiBaseUrl();
+}
 
-const hud = (path: string) => `${API_BASE_URL}/hud${path}`;
+const hud = (path: string) => `${apiBase()}/hud${path}`;
 const session = (sessionId: string) => hud(`/sessions/${encodeURIComponent(sessionId)}`);
 
 // ─── Sessions ─────────────────────────────────────────────────────────────────

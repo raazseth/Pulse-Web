@@ -1,7 +1,10 @@
 import { AuthUser, TokenPair } from "@/modules/auth/types";
 import { resolveHudApiBaseUrl } from "@/shared/utils/hudApiBaseUrl";
 
-const BASE = resolveHudApiBaseUrl();
+/** Resolve at call time so Electron `window.api.serverPort` exists (not at module load). */
+function apiBase(): string {
+  return resolveHudApiBaseUrl();
+}
 
 interface AuthResult {
   user: AuthUser;
@@ -14,7 +17,7 @@ interface RefreshResult {
 }
 
 async function post<T>(path: string, body: Record<string, string> = {}): Promise<T> {
-  const res = await fetch(`${BASE}/auth${path}`, {
+  const res = await fetch(`${apiBase()}/auth${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     // credentials: "include" sends httpOnly cookies so the server can read
@@ -64,7 +67,7 @@ export async function apiRefresh(): Promise<RefreshResult> {
 }
 
 export async function apiLogout(): Promise<void> {
-  await fetch(`${BASE}/auth/logout`, {
+  await fetch(`${apiBase()}/auth/logout`, {
     method: "DELETE",
     credentials: "include",
   });
