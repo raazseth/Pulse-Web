@@ -14,6 +14,7 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
+import type { PortalProps } from "@mui/material/Portal";
 import RecordVoiceOverOutlinedIcon from "@mui/icons-material/RecordVoiceOverOutlined";
 import { SPEAKER_PRESETS } from "@/modules/transcript/constants/speakerPresets";
 
@@ -23,6 +24,8 @@ export interface OverlayChunkDialogProps {
   disabled: boolean;
   onSendChunk: (payload: { text: string; speakerId: string }) => boolean;
   getDefaultSpeakerId?: () => string;
+  /** Modal portal root (e.g. Document PiP `document.body`). Defaults to owner document. */
+  container?: PortalProps["container"];
 }
 
 export function OverlayChunkDialog({
@@ -31,6 +34,7 @@ export function OverlayChunkDialog({
   disabled,
   onSendChunk,
   getDefaultSpeakerId,
+  container,
 }: OverlayChunkDialogProps) {
   const theme = useTheme();
   const [speakerId, setSpeakerId] = useState("interviewer");
@@ -69,6 +73,7 @@ export function OverlayChunkDialog({
       onClose={handleClose}
       maxWidth="sm"
       fullWidth
+      container={container}
       slotProps={{
         root: { sx: { zIndex: 11000 } },
         paper: {

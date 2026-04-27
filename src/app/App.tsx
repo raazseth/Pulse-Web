@@ -31,7 +31,7 @@ import { DESKTOP_SENTINEL } from "@/shared/constants/auth";
 import { useAuth } from "@/modules/auth/hooks/useAuthStore";
 import { defaultTagOptions } from "@/modules/tagging/services/taggingStorage";
 import { transcriptLineHasCatalogTag } from "@/modules/tagging/utils/transcriptTagDedupe";
-import { SessionOverlay } from "@/shared/components/SessionOverlay";
+import { FloatingPulseHud } from "@/shared/components/FloatingPulseHud";
 import { singleFlightByKey } from "@/shared/utils/singleFlightByKey";
 import { SessionNote } from "@/modules/context/types";
 import { TranscriptSocketTag } from "@/modules/transcript/types";
@@ -107,6 +107,16 @@ export function App() {
       transcript.items.find((item) => item.id === session.selectedTranscriptId) ??
       transcript.items.at(-1),
     [session.selectedTranscriptId, transcript.items],
+  );
+
+  const floatingTranscriptPreview = useMemo(
+    () => transcript.items.slice(-2),
+    [transcript.items],
+  );
+
+  const floatingQuickTags = useMemo(
+    () => session.availableTags.slice(0, 8),
+    [session.availableTags],
   );
 
   const sendFocusedTag = useCallback(() => {
@@ -557,12 +567,24 @@ export function App() {
         </Grid>
       </Stack>
 
-      <SessionOverlay
+      <FloatingPulseHud
+        transcriptPreview={transcript.items.slice(-30)}
+        transcriptStatus={transcript.status}
+        prompts={promptSuggestions.prompts}
+        onPromptUse={handlePromptUse}
+        onPromptDismiss={handlePromptDismiss}
+        quickTags={session.availableTags.slice(0, 8)}
+        onQuickTag={handleTagAttach}
         voiceActive={voice.isActive}
         onVoiceToggle={voice.toggle}
         onSendChunk={handleComposerSubmit}
         sendChunkDisabled={!isConnected}
         getDefaultSpeakerId={() => speakerIdRef.current}
+        composerLine={composerLine}
+        onComposerLineChange={setComposerLine}
+        onSpeakerChange={(id) => {
+          speakerIdRef.current = id;
+        }}
       />
     </Box>
   );

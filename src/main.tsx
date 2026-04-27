@@ -5,6 +5,10 @@ if (import.meta.env.DEV && "serviceWorker" in navigator) {
   navigator.serviceWorker.getRegistrations().then((regs) => {
     regs.forEach((r) => r.unregister());
   });
+} else if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  import("virtual:pwa-register").then(({ registerSW }) => {
+    registerSW({ immediate: true });
+  });
 }
 import { CssBaseline, GlobalStyles } from "@mui/material";
 import { RouterProvider } from "react-router-dom";

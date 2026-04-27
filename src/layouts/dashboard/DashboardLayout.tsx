@@ -4,6 +4,7 @@ import { Outlet } from "react-router-dom";
 import { TranscriptHudProvider } from "@/modules/transcript/context/TranscriptHudContext";
 import { NavSidebar } from "./NavSidebar";
 import { TopBar } from "./TopBar";
+import { PwaInstallBanner } from "@/shared/components/PwaInstallBanner";
 
 const SIDEBAR_WIDTH = 280;
 const TOPBAR_HEIGHT = 64;
@@ -58,6 +59,7 @@ export function DashboardLayout() {
             bgcolor: "background.default",
           }}
         >
+          <PwaInstallBanner />
           <Outlet />
         </Box>
       </Box>
