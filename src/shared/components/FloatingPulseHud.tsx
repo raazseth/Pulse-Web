@@ -1,15 +1,33 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import createCache, { type EmotionCache } from "@emotion/cache";
 import { CacheProvider } from "@emotion/react";
-import { Alert, CssBaseline, IconButton, Snackbar, Tooltip, useTheme } from "@mui/material";
+import {
+  Alert,
+  alpha,
+  Button,
+  CircularProgress,
+  CssBaseline,
+  Snackbar,
+  useTheme,
+} from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
-import PictureInPictureAltOutlinedIcon from "@mui/icons-material/PictureInPictureAltOutlined";
+import PlayArrowRoundedIcon from "@mui/icons-material/PlayArrowRounded";
 import { FloatingPulseHudPanel } from "@/shared/components/FloatingPulseHudPanel";
 import { useTabBackgrounded } from "@/shared/hooks/useTabBackgrounded";
 import { seedPictureInPictureDocument } from "@/shared/utils/seedPictureInPictureDocument";
-import type { TranscriptItem, TranscriptStreamStatus } from "@/modules/transcript/types";
+import type {
+  TranscriptItem,
+  TranscriptStreamStatus,
+} from "@/modules/transcript/types";
 import type { PromptSuggestion } from "@/modules/prompts/types";
 import type { TagOption } from "@/modules/tagging/types";
 
@@ -23,8 +41,11 @@ function isDocumentPiPSupported(): boolean {
   return (
     typeof window !== "undefined" &&
     "documentPictureInPicture" in window &&
-    typeof (window as unknown as { documentPictureInPicture?: { requestWindow?: unknown } }).documentPictureInPicture
-      ?.requestWindow === "function"
+    typeof (
+      window as unknown as {
+        documentPictureInPicture?: { requestWindow?: unknown };
+      }
+    ).documentPictureInPicture?.requestWindow === "function"
   );
 }
 
@@ -54,6 +75,7 @@ export interface FloatingPulseHudProps {
   onSpeakerChange?: (speakerId: string) => void;
   sessionTitle?: string;
   sessionId?: string;
+  onSystemAudioStart?: () => Promise<void> | void;
 }
 
 export function FloatingPulseHud(props: FloatingPulseHudProps) {
@@ -76,6 +98,7 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
     onSpeakerChange,
     sessionTitle,
     sessionId,
+    onSystemAudioStart,
   } = props;
 
   const theme = useTheme();
@@ -134,9 +157,20 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
 
   const openDocumentPip = useCallback(async () => {
     setPipError(null);
-    const api = (window as unknown as { documentPictureInPicture?: { requestWindow: (o?: { width?: number; height?: number }) => Promise<Window> } }).documentPictureInPicture;
+    const api = (
+      window as unknown as {
+        documentPictureInPicture?: {
+          requestWindow: (o?: {
+            width?: number;
+            height?: number;
+          }) => Promise<Window>;
+        };
+      }
+    ).documentPictureInPicture;
     if (!api?.requestWindow) {
-      setPipError("Document Picture-in-Picture is not available in this browser.");
+      setPipError(
+        "Document Picture-in-Picture is not available in this browser.",
+      );
       return;
     }
     try {
@@ -147,15 +181,19 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
       win.document.body.style.margin = "0";
       win.document.body.style.minHeight = "100%";
       win.document.body.style.height = "100%";
-      win.document.documentElement.style.backgroundColor = theme.palette.grey[900];
+      win.document.documentElement.style.backgroundColor =
+        theme.palette.grey[900];
       win.document.body.style.backgroundColor = theme.palette.grey[900];
       setPipWindow(win);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.warn("[FloatingPulseHud] documentPictureInPicture.requestWindow failed", e);
+      console.warn(
+        "[FloatingPulseHud] documentPictureInPicture.requestWindow failed",
+        e,
+      );
       setPipError(
         msg ||
-        "Could not open Picture-in-Picture. Use Chrome/Edge over HTTPS, and try clicking the button directly (not through an extension menu).",
+          "Could not open Picture-in-Picture. Use Chrome/Edge over HTTPS, and try clicking the button directly (not through an extension menu).",
       );
     }
   }, [theme]);
@@ -256,8 +294,28 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
     );
   }, [pipWindow, theme, panelCommon]);
 
+  const [interviewStarting, setInterviewStarting] = useState(false);
+
   const pipOk = isDocumentPiPSupported();
-  const mainFloatVisible = mounted && tabBackgrounded && !pipWindow && !dismissed;
+  const isElectron = typeof window !== "undefined" && "api" in window;
+  const showStartButton =
+    mounted && !tabBackgrounded && !pipWindow && (pipOk || isElectron);
+
+  const handleStartInterview = useCallback(async () => {
+    setInterviewStarting(true);
+    try {
+      await onSystemAudioStart?.();
+      if (isElectron) {
+        void window.api?.startInterview();
+      } else {
+        await openDocumentPip();
+      }
+    } finally {
+      setInterviewStarting(false);
+    }
+  }, [onSystemAudioStart, isElectron, openDocumentPip]);
+  const mainFloatVisible =
+    mounted && tabBackgrounded && !pipWindow && !dismissed;
 
   return createPortal(
     <>
@@ -273,26 +331,55 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
         />
       ) : null}
 
-      {!pipWindow && pipOk && !tabBackgrounded ? (
-        <Tooltip title="Open always-on-top HUD (Document Picture-in-Picture) — Chrome/Edge, secure context">
-          <IconButton
-            aria-label="Open always-on-top HUD"
-            type="button"
-            onClick={() => void openDocumentPip()}
-            size="small"
-            sx={{
-              position: "fixed",
-              right: 16,
-              bottom: 16,
-              zIndex: 10049,
-              bgcolor: "action.hover",
-              border: 1,
-              borderColor: "divider",
-            }}
-          >
-            <PictureInPictureAltOutlinedIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
+      {showStartButton ? (
+        <Button
+          variant="contained"
+          size="medium"
+          startIcon={
+            interviewStarting ? (
+              <CircularProgress size={16} color="inherit" />
+            ) : (
+              <PlayArrowRoundedIcon />
+            )
+          }
+          disabled={interviewStarting}
+          onClick={() => void handleStartInterview()}
+          sx={{
+            position: "fixed",
+            right: 20,
+            bottom: 20,
+            zIndex: 10049,
+            borderRadius: "100px",
+            fontWeight: 700,
+            textTransform: "none",
+            fontSize: "0.9375rem",
+            letterSpacing: "0.01em",
+            cursor: interviewStarting ? "not-allowed" : "pointer",
+            px: 3,
+            py: 1.25,
+            background: (t) =>
+              `linear-gradient(135deg, ${t.palette.primary.main} 0%, ${t.palette.secondary.main} 100%)`,
+            color: (t) => t.palette.primary.contrastText,
+            border: "1px solid rgba(255,255,255,0.12)",
+            boxShadow: (t) =>
+              `0 4px 24px ${alpha(t.palette.primary.main, 0.4)}, 0 1px 4px ${alpha(t.palette.common.black, 0.3)}`,
+            transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
+            "&:hover": {
+              background: (t) =>
+                `linear-gradient(135deg, ${t.palette.primary.dark} 0%, ${t.palette.secondary.dark} 100%)`,
+              boxShadow: (t) =>
+                `0 8px 32px ${alpha(t.palette.primary.main, 0.65)}, 0 2px 8px ${alpha(t.palette.common.black, 0.35)}`,
+              transform: "translateY(-1px)",
+            },
+            "&:active": {
+              transform: "translateY(0)",
+              boxShadow: (t) =>
+                `0 4px 16px ${alpha(t.palette.primary.main, 0.4)}`,
+            },
+          }}
+        >
+          Start Interview
+        </Button>
       ) : null}
 
       <Snackbar
@@ -301,7 +388,12 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
         onClose={() => setPipError(null)}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <Alert severity="warning" variant="filled" onClose={() => setPipError(null)} sx={{ width: "100%", maxWidth: 480 }}>
+        <Alert
+          severity="warning"
+          variant="filled"
+          onClose={() => setPipError(null)}
+          sx={{ width: "100%", maxWidth: 480 }}
+        >
           {pipError}
         </Alert>
       </Snackbar>

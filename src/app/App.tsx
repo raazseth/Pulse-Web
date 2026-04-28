@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
+  Button,
   Chip,
+  CircularProgress,
   Grid,
   Stack,
   Typography,
 } from "@mui/material";
+import PlayArrowRoundedIcon from "@mui/icons-material/PlayArrowRounded";
 import { ContextPanel } from "@/modules/context/components/ContextPanel";
 import { useSessionStore } from "@/modules/context/hooks/useSessionStore";
 import { useHudContextApi } from "@/modules/context/hooks/useHudContextApi";
@@ -20,10 +23,12 @@ import { TimelinePanel } from "@/modules/timeline/components/TimelinePanel";
 import { useTimelineMarkers } from "@/modules/timeline/hooks/useTimelineMarkers";
 import { TranscriptComposer } from "@/modules/transcript/components/TranscriptComposer";
 import { TranscriptPanel } from "@/modules/transcript/components/TranscriptPanel";
+import { FloatingPulseHudPanel } from "@/shared/components/FloatingPulseHudPanel";
 import { useTranscriptHud } from "@/modules/transcript/context/TranscriptHudContext";
 import { useTranscriptStream } from "@/modules/transcript/hooks/useTranscriptStream";
 import { useMicCapture } from "@/modules/transcript/hooks/useMicCapture";
 import { useBrowserFirstVoice } from "@/modules/transcript/hooks/useBrowserFirstVoice";
+import { useSystemAudioCapture } from "@/modules/transcript/hooks/useSystemAudioCapture";
 import { getHudPromptUrl } from "@/shared/utils/hudApi";
 import { getRuntimeApiConfig } from "@/shared/utils/hudApiBaseUrl";
 import { fetchWithAuth } from "@/shared/utils/fetchWithAuth";
@@ -220,6 +225,20 @@ export function App() {
     refreshAccessToken,
     onChunk: handleMicChunk,
     onVoiceBackendError: () => voiceTranscribeFallbackRef.current?.(),
+  });
+
+  const handleSystemAudioChunk = useCallback((text: string) => {
+    const speakerId = speakerIdRef.current;
+    applyVoiceToComposerLine(text, voiceAutoSend);
+    if (!voiceAutoSend) return;
+    const sent = handleComposerSubmit({ text, speakerId, transcriptSource: "server-transcribe" });
+    if (sent) setComposerLine("");
+  }, [voiceAutoSend, applyVoiceToComposerLine, handleComposerSubmit]);
+
+  const systemAudio = useSystemAudioCapture({
+    accessToken,
+    refreshAccessToken,
+    onChunk: handleSystemAudioChunk,
   });
 
   const noteApi = useNoteApi({
@@ -469,17 +488,64 @@ export function App() {
     transcribeFallbackRef: voiceTranscribeFallbackRef,
   });
 
+  const isPipMode = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("pip");
+  const isElectronEnv = typeof window !== "undefined" && "api" in window;
+  const [interviewStarting, setInterviewStarting] = useState(false);
+
+  const handleStartInterview = useCallback(async () => {
+    setInterviewStarting(true);
+    try {
+      await systemAudio.start();
+      if (isElectronEnv) {
+        void window.api?.startInterview();
+      }
+    } finally {
+      setInterviewStarting(false);
+    }
+  }, [systemAudio, isElectronEnv]);
+
+  if (isPipMode) {
+    return (
+      <FloatingPulseHudPanel
+        visible
+        layout="pip"
+        helpText=""
+        showPipLaunch={false}
+        transcriptPreview={transcript.items.slice(-30)}
+        transcriptStatus={transcript.status}
+        prompts={promptSuggestions.prompts}
+        onPromptUse={handlePromptUse}
+        onPromptDismiss={handlePromptDismiss}
+        quickTags={session.availableTags.slice(0, 8)}
+        onQuickTag={handleTagAttach}
+        voiceActive={voice.isActive}
+        onVoiceToggle={voice.toggle}
+        onSendChunk={handleComposerSubmit}
+        sendChunkDisabled={!isConnected}
+        getDefaultSpeakerId={() => speakerIdRef.current}
+        composerLine={composerLine}
+        onComposerLineChange={setComposerLine}
+        onSpeakerChange={(id) => { speakerIdRef.current = id; }}
+        sessionTitle={session.metadata.title}
+        sessionId={session.sessionId}
+        onClose={() => { void window.api?.stopInterview(); window.close(); }}
+      />
+    );
+  }
+
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: { xs: 2, md: 3 }, maxWidth: 1400, mx: "auto", width: "100%" }}>
       <Stack spacing={3}>
-        <Box>
-          <Typography variant="h4" component="h1">
-            {sessionDisplayName}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Track live transcript, tag moments, monitor prompts, and keep study context in one flow.
-          </Typography>
-        </Box>
+        <Stack direction="row" spacing={2} sx={{ alignItems: "flex-start", justifyContent: "space-between" }}>
+          <Box>
+            <Typography variant="h4" component="h1">
+              {sessionDisplayName}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Track live transcript, tag moments, monitor prompts, and keep study context in one flow.
+            </Typography>
+          </Box>
+        </Stack>
 
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
           {!isConnected ? (
@@ -588,6 +654,7 @@ export function App() {
         }}
         sessionTitle={session.metadata.title}
         sessionId={session.sessionId}
+        onSystemAudioStart={systemAudio.start}
       />
     </Box>
   );
