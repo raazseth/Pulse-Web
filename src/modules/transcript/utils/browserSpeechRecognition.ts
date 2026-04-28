@@ -1,4 +1,4 @@
-/** Minimal typing for Chromium / Web Speech API (not always in TS `lib.dom`). */
+                                                                                 
 export interface BrowserSpeechRecognition extends EventTarget {
   continuous: boolean;
   interimResults: boolean;
@@ -28,7 +28,7 @@ export interface BrowserSpeechRecognitionErrorEvent {
   readonly error: string;
 }
 
-/** Constructor for the W3C / Chromium speech recognition API. */
+                                                                 
 export type SpeechRecognitionCtor = new () => BrowserSpeechRecognition;
 
 export function getSpeechRecognitionConstructor(): SpeechRecognitionCtor | null {

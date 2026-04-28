@@ -10,13 +10,13 @@ function wrapper({ children }: PropsWithChildren) {
 
 const TAG: TranscriptTag = { id: "t1", tagId: "insight", timestamp: "2024-01-01T00:00:00.000Z" };
 
-// ---------------------------------------------------------------------------
-// Stable action refs (the key regression guard for defect #13)
-//
-// Each action uses useCallback(fn, []) so its reference never changes between
-// renders. These tests will fail if any action is accidentally moved back to
-// useMemo([state]) or useCallback([state]).
-// ---------------------------------------------------------------------------
+
+
+
+
+
+
+
 
 describe("useSessionStore — all action refs are stable across state changes", () => {
   it("setTags reference is unchanged after setTags is called", () => {
@@ -97,9 +97,9 @@ describe("useSessionStore — all action refs are stable across state changes", 
   });
 });
 
-// ---------------------------------------------------------------------------
-// State changes — verify the actions actually update state correctly
-// ---------------------------------------------------------------------------
+
+
+
 
 describe("useSessionStore — state mutations", () => {
   it("setSessionId updates sessionId", () => {
@@ -141,6 +141,6 @@ describe("useSessionStore — state mutations", () => {
     const originalFacilitator = result.current.metadata.facilitator;
     act(() => { result.current.updateMetadata({ title: "Patched Title" }); });
     expect(result.current.metadata.title).toBe("Patched Title");
-    expect(result.current.metadata.facilitator).toBe(originalFacilitator); // unchanged
+    expect(result.current.metadata.facilitator).toBe(originalFacilitator); 
   });
 });

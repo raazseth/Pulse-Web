@@ -132,25 +132,6 @@ The CLI prompts you to link a project and configure env vars interactively.
 
 ---
 
-### Docker (local or cloud)
-
-Build and run the container:
-
-```bash
-docker build \
-  --build-arg VITE_HUD_API_URL=https://api.your-domain.com/api/v1 \
-  --build-arg VITE_TRANSCRIPT_WS_URL=wss://api.your-domain.com/ws/transcript \
-  -t pulse-hud-client .
-
-docker run -p 8080:80 pulse-hud-client
-```
-
-App is served on `http://localhost:8080` via nginx.
-
-The image uses a **two-stage build** (Node 22 alpine to build, nginx 1.27 alpine to serve) and stays under ~25 MB.
-
----
-
 ## Project structure
 
 ```

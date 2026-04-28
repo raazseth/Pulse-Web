@@ -7,12 +7,12 @@ export interface AuthUser {
 
 export interface TokenPair {
   accessToken: string;
-  refreshToken?: string; // server may still include it; client ignores it — stored as httpOnly cookie
+  refreshToken?: string; 
 }
 
 export interface AuthState {
   user: AuthUser | null;
   accessToken: string | null;
   isLoading: boolean;
-  // refreshToken is intentionally absent: it lives in an httpOnly cookie (not JS-accessible)
+  
 }

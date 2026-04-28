@@ -35,16 +35,12 @@ const livePulse = keyframes`
   100% { box-shadow: 0 0 0 0   rgba(34,197,94,0);    }
 `;
 
-// ─── Tokens ───────────────────────────────────────────────────────────────────
-
-const BRAND   = "#149F77";
-const BORDER  = "rgba(255,255,255,0.09)";
-const T1      = "rgba(255,255,255,0.92)";
-const T2      = "rgba(255,255,255,0.58)";
-const T3      = "rgba(255,255,255,0.35)";
+const BRAND = "#149F77";
+const BORDER = "rgba(255,255,255,0.09)";
+const T1 = "rgba(255,255,255,0.92)";
+const T2 = "rgba(255,255,255,0.58)";
+const T3 = "rgba(255,255,255,0.35)";
 const CARD_BG = "rgba(0,0,0,0.18)";
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function initials(name: string) {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -57,21 +53,19 @@ function truncate(str: string | undefined, max: number) {
 
 function relativeDate(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
-  const mins  = Math.floor(diff / 60_000);
+  const mins = Math.floor(diff / 60_000);
   const hours = Math.floor(diff / 3_600_000);
-  const days  = Math.floor(diff / 86_400_000);
-  if (mins < 1)   return "just now";
-  if (mins < 60)  return `${mins}m ago`;
+  const days = Math.floor(diff / 86_400_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
   if (hours < 24) return `${hours}h ago`;
   return `${days}d ago`;
 }
 
-// ─── Status badge ─────────────────────────────────────────────────────────────
-
 const STATUS_CFG: Record<SessionStatus, { color: string; label: string; pulse: boolean }> = {
-  active: { color: "#22c55e", label: "Live",   pulse: true  },
+  active: { color: "#22c55e", label: "Live", pulse: true },
   paused: { color: "#f59e0b", label: "Paused", pulse: false },
-  ended:  { color: "#6b7280", label: "Ended",  pulse: false },
+  ended: { color: "#6b7280", label: "Ended", pulse: false },
 };
 
 function StatusDot({ status }: { status: SessionStatus }) {
@@ -101,8 +95,6 @@ function StatusBadge({ status }: { status: SessionStatus }) {
     </Box>
   );
 }
-
-// ─── Primitives ───────────────────────────────────────────────────────────────
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -202,8 +194,6 @@ function NavItem({ icon, label, active, badge }: { icon: React.ReactNode; label:
   );
 }
 
-// ─── Session row ──────────────────────────────────────────────────────────────
-
 function SessionRow({
   s,
   isActive,
@@ -250,8 +240,6 @@ function SessionRow({
   );
 }
 
-// ─── Sidebar content ──────────────────────────────────────────────────────────
-
 function SidebarContent({
   topbarHeight,
   onClose,
@@ -260,7 +248,6 @@ function SidebarContent({
 }: {
   topbarHeight: number;
   onClose?: () => void;
-  /** lg+ docked sidebar: show hide control in the Pulse HUD header row */
   desktopShowCollapse?: boolean;
   onDesktopCollapse?: () => void;
 }) {
@@ -278,13 +265,13 @@ function SidebarContent({
       if (s.id === session.sessionId || switchingId) return;
       const prevId = session.sessionId;
       if (prevId && session.sessionStatus === "active") {
-        updateSessionStatus(prevId, "paused").catch(() => {});
+        updateSessionStatus(prevId, "paused").catch(() => { });
       }
       setSwitchingId(s.id);
       session.setSessionId(s.id);
       session.setSessionStatus("active");
       session.updateMetadata({ title: s.title });
-      updateSessionStatus(s.id, "active").catch(() => {});
+      updateSessionStatus(s.id, "active").catch(() => { });
       try {
         const res = await fetchWithAuth(getHudNotesUrl(s.id), {}, () => accessToken, refreshAccessToken);
         if (res.ok) {
@@ -292,7 +279,6 @@ function SidebarContent({
           if (Array.isArray(json.data)) session.updateNotes(json.data);
         }
       } catch {
-        // server offline — keep existing notes
       } finally {
         setSwitchingId(null);
       }
@@ -313,7 +299,6 @@ function SidebarContent({
   return (
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column", bgcolor: "secondary.main", borderRight: `1px solid rgba(0,0,0,0.18)` }}>
 
-      {/* ── Logo + Pulse HUD; collapse control floats at row end (desktop only) ── */}
       <Box
         sx={{
           height: topbarHeight,
@@ -362,11 +347,9 @@ function SidebarContent({
         )}
       </Box>
 
-      {/* ── Body ── */}
       <Box sx={{ flex: 1, overflowY: "auto", px: 1.5, py: 2, "&::-webkit-scrollbar": { width: 4 }, "&::-webkit-scrollbar-thumb": { bgcolor: "rgba(255,255,255,0.12)", borderRadius: 4 } }}>
         <Stack spacing={3}>
 
-          {/* Nav */}
           <Box>
             <SectionLabel>Workspace</SectionLabel>
             <Stack spacing={0.25}>
@@ -385,7 +368,6 @@ function SidebarContent({
             </Stack>
           </Box>
 
-          {/* Recent sessions */}
           <Box>
             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", px: 1.5, mb: 0.5 }}>
               <Typography sx={{ fontSize: "0.6875rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: T3 }}>
@@ -432,7 +414,6 @@ function SidebarContent({
             )}
           </Box>
 
-          {/* Active session detail */}
           <Box>
             <SectionLabel>Active Session</SectionLabel>
             <InfoCard>
@@ -457,7 +438,6 @@ function SidebarContent({
             </InfoCard>
           </Box>
 
-          {/* Study context */}
           {(session.metadata.audience || session.metadata.role) && (
             <Box>
               <SectionLabel>Study Context</SectionLabel>
@@ -470,7 +450,6 @@ function SidebarContent({
             </Box>
           )}
 
-          {/* Notes */}
           {session.notes.length > 0 && (
             <Box>
               <SectionLabel>Notes ({session.notes.length})</SectionLabel>
@@ -514,7 +493,6 @@ function SidebarContent({
         </Stack>
       </Box>
 
-      {/* ── User footer ── */}
       <Box sx={{ flexShrink: 0, borderTop: `1px solid ${BORDER}`, px: 2, py: 1.5 }}>
         {confirmingLogout ? (
           <Box>
@@ -558,14 +536,11 @@ function SidebarContent({
   );
 }
 
-// ─── Export ───────────────────────────────────────────────────────────────────
-
 interface NavSidebarProps {
   width: number;
   topbarHeight: number;
   open: boolean;
   onClose: () => void;
-  /** lg+ only: whether the docked sidebar strip is visible */
   desktopExpanded: boolean;
   onDesktopExpandedChange: (expanded: boolean) => void;
 }

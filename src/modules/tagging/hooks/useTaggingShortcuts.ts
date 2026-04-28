@@ -5,7 +5,7 @@ import { indexForPaletteDigit } from "@/modules/tagging/utils/paletteShortcut";
 interface UseTaggingShortcutsOptions {
   onTagLatest: () => void;
   tagPalette?: TagOption[];
-  /** Ctrl+1…Ctrl+9: palette index (0-based). Caller may focus, attach, or both. */
+                                                                                   
   onFocusTagByIndex?: (index: number) => void;
 }
 

@@ -2,9 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 
-// ---------------------------------------------------------------------------
-// Mock auth API so tests don't make real HTTP calls
-// ---------------------------------------------------------------------------
+
+
+
 vi.mock("@/modules/auth/api/authApi", () => ({
   apiLogin: vi.fn(),
   apiRegister: vi.fn(),
@@ -30,16 +30,16 @@ const FAKE_USER: AuthUser = {
 
 const FAKE_TOKENS: TokenPair = {
   accessToken: "access-abc",
-  // refreshToken is intentionally absent — the server sets it as an httpOnly cookie
+  
 };
 
 function wrapper({ children }: PropsWithChildren) {
   return <AuthProvider>{children}</AuthProvider>;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers to inspect storage
-// ---------------------------------------------------------------------------
+
+
+
 
 function getStoredUser() {
   const raw = localStorage.getItem("pulse_user");
@@ -49,7 +49,7 @@ function getStoredUser() {
 beforeEach(() => {
   localStorage.clear();
   vi.clearAllMocks();
-  // Default: refresh fails (unauthenticated — no valid cookie in test env)
+  
   mockRefresh.mockRejectedValue(new Error("no cookie"));
 });
 
@@ -57,9 +57,9 @@ afterEach(() => {
   localStorage.clear();
 });
 
-// ---------------------------------------------------------------------------
-// Initial state — mount always calls apiRefresh (cookie sent automatically)
-// ---------------------------------------------------------------------------
+
+
+
 
 describe("AuthProvider — initial state (apiRefresh fails — no valid cookie)", () => {
   it("starts with null user and accessToken after failed refresh", async () => {
@@ -90,9 +90,9 @@ describe("AuthProvider — initial state (apiRefresh succeeds — valid cookie p
   });
 });
 
-// ---------------------------------------------------------------------------
-// Login
-// ---------------------------------------------------------------------------
+
+
+
 
 describe("AuthProvider — login", () => {
   it("sets user and accessToken in state after successful login", async () => {
@@ -126,23 +126,23 @@ describe("AuthProvider — login", () => {
     await act(async () => {});
     await act(async () => { await result.current.login("x@x.com", "pw"); });
 
-    // The refresh token must never appear in JS-accessible storage
+    
     expect(sessionStorage.getItem("pulse_refresh_token")).toBeNull();
     expect(localStorage.getItem("pulse_refresh_token")).toBeNull();
-    // Access token is only in React state, not in storage
+    
     expect(localStorage.getItem("pulse_access_token")).toBeNull();
   });
 });
 
-// ---------------------------------------------------------------------------
-// refreshAccessToken
-// ---------------------------------------------------------------------------
+
+
+
 
 describe("AuthProvider — refreshAccessToken", () => {
   it("returns new access token and updates state on success", async () => {
-    // Mount effect fails (default mock = rejected) — user starts unauthenticated.
+    
     const { result } = renderHook(() => useAuth(), { wrapper });
-    await act(async () => {}); // mount effect fails, isLoading: false
+    await act(async () => {}); 
 
     mockRefresh.mockResolvedValueOnce({ accessToken: "new-access-2", user: FAKE_USER });
 
@@ -159,7 +159,7 @@ describe("AuthProvider — refreshAccessToken", () => {
     mockRefresh.mockRejectedValue(new Error("expired"));
 
     const { result } = renderHook(() => useAuth(), { wrapper });
-    await act(async () => {}); // mount fails
+    await act(async () => {}); 
 
     let returned: string | null = "sentinel";
     await act(async () => {
@@ -172,9 +172,9 @@ describe("AuthProvider — refreshAccessToken", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Logout
-// ---------------------------------------------------------------------------
+
+
+
 
 describe("AuthProvider — logout", () => {
   it("clears user and accessToken from state and localStorage", async () => {
@@ -205,9 +205,9 @@ describe("AuthProvider — logout", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// DESKTOP_SENTINEL constant
-// ---------------------------------------------------------------------------
+
+
+
 
 describe("DESKTOP_SENTINEL", () => {
   it("is the string 'desktop'", () => {

@@ -4,7 +4,7 @@ import { fetchWithAuth } from "@/shared/utils/fetchWithAuth";
 
 interface UseMicCaptureOptions {
   onChunk: (text: string) => void;
-  /** Called when server transcribe fails or recorder errors — use to fall back (e.g. browser SpeechRecognition). */
+                                                                                                                    
   onVoiceBackendError?: () => void;
   accessToken?: string | null;
   refreshAccessToken?: () => Promise<string | null>;
@@ -65,7 +65,7 @@ export function useMicCapture({
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const activeRequestsRef = useRef<Set<AbortController>>(new Set());
-  /** Bumps on stop() and on each successful start(); in-flight transcribe callbacks must match or be ignored. */
+                                                                                                                 
   const captureSessionRef = useRef(0);
 
   const stop = useCallback(() => {

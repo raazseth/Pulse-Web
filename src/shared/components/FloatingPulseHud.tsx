@@ -52,6 +52,8 @@ export interface FloatingPulseHudProps {
   composerLine: string;
   onComposerLineChange: (value: string) => void;
   onSpeakerChange?: (speakerId: string) => void;
+  sessionTitle?: string;
+  sessionId?: string;
 }
 
 export function FloatingPulseHud(props: FloatingPulseHudProps) {
@@ -72,6 +74,8 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
     composerLine,
     onComposerLineChange,
     onSpeakerChange,
+    sessionTitle,
+    sessionId,
   } = props;
 
   const theme = useTheme();
@@ -151,7 +155,7 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
       console.warn("[FloatingPulseHud] documentPictureInPicture.requestWindow failed", e);
       setPipError(
         msg ||
-          "Could not open Picture-in-Picture. Use Chrome/Edge over HTTPS, and try clicking the button directly (not through an extension menu).",
+        "Could not open Picture-in-Picture. Use Chrome/Edge over HTTPS, and try clicking the button directly (not through an extension menu).",
       );
     }
   }, [theme]);
@@ -173,6 +177,8 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
       composerLine,
       onComposerLineChange,
       onSpeakerChange,
+      sessionTitle,
+      sessionId,
       onClose: handleDismiss,
     }),
     [
@@ -191,6 +197,8 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
       composerLine,
       onComposerLineChange,
       onSpeakerChange,
+      sessionTitle,
+      sessionId,
       handleDismiss,
     ],
   );

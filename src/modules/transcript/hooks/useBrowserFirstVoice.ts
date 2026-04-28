@@ -48,7 +48,7 @@ export function useBrowserFirstVoice(opts: {
     try {
       recognitionRef.current?.stop();
     } catch {
-      /* already stopped */
+                           
     }
     recognitionRef.current = null;
     setSpeechListening(false);

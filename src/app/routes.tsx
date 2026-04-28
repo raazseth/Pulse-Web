@@ -32,7 +32,6 @@ function useHashRouterForFileProtocol(): boolean {
   return window.location.protocol === "file:" || window.location.href.startsWith("file:");
 }
 
-/** Hash routes when served from `file://` (Electron `loadFile`), so paths are not drive letters. */
 export const appRouter = useHashRouterForFileProtocol()
   ? createHashRouter(routeObjects)
   : createBrowserRouter(routeObjects);

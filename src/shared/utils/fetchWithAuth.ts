@@ -5,11 +5,6 @@ function buildAuthHeaders(token: string | null): Record<string, string> {
   return { Authorization: `Bearer ${token}` };
 }
 
-/**
- * Fetch wrapper that automatically retries once on 401 using the provided
- * refreshToken callback. Callers must still check res.ok on the returned
- * Response — this only handles token refresh, not response parsing.
- */
 export async function fetchWithAuth(
   url: string,
   options: RequestInit,

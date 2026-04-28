@@ -24,7 +24,7 @@ export interface OverlayChunkDialogProps {
   disabled: boolean;
   onSendChunk: (payload: { text: string; speakerId: string }) => boolean;
   getDefaultSpeakerId?: () => string;
-  /** Modal portal root (e.g. Document PiP `document.body`). Defaults to owner document. */
+                                                                                           
   container?: PortalProps["container"];
 }
 

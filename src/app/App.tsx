@@ -201,14 +201,16 @@ export function App() {
     console.log("[server-transcript]", { text, speakerId });
     applyVoiceToComposerLine(text, voiceAutoSend);
     if (!voiceAutoSend) return;
-    handleComposerSubmit({ text, speakerId, transcriptSource: "server-transcribe" });
+    const sent = handleComposerSubmit({ text, speakerId, transcriptSource: "server-transcribe" });
+    if (sent) setComposerLine("");
   }, [voiceAutoSend, applyVoiceToComposerLine, handleComposerSubmit]);
 
   const handleBrowserDictatedText = useCallback((text: string) => {
     const speakerId = speakerIdRef.current;
     applyVoiceToComposerLine(text, voiceAutoSend);
     if (!voiceAutoSend) return;
-    handleComposerSubmit({ text, speakerId, transcriptSource: "browser-speech" });
+    const sent = handleComposerSubmit({ text, speakerId, transcriptSource: "browser-speech" });
+    if (sent) setComposerLine("");
   }, [voiceAutoSend, applyVoiceToComposerLine, handleComposerSubmit]);
 
   const voiceTranscribeFallbackRef = useRef<(() => void) | null>(null);
@@ -405,7 +407,6 @@ export function App() {
         audience: session.metadata.audience,
         role: session.metadata.role,
       };
-      // Strict Mode remounts reset refs; single-flight ensures only one POST runs per token.
       singleFlightByKey(`hud:auto-session:${accessToken}`, () => sessionList.createSession(payload))
         .then((created) => {
           if (created?.id) session.setSessionId(created.id);
@@ -585,6 +586,8 @@ export function App() {
         onSpeakerChange={(id) => {
           speakerIdRef.current = id;
         }}
+        sessionTitle={session.metadata.title}
+        sessionId={session.sessionId}
       />
     </Box>
   );

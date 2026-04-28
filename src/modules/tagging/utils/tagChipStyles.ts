@@ -1,10 +1,10 @@
 import { alpha, type Theme } from "@mui/material/styles";
 import type { TagOption } from "@/modules/tagging/types";
 
-/**
- * Outlined tag chips on glass/light wells: tinted border and fill from the tag palette
- * so each semantic color stays visible (MuiChip `color` alone is often overridden by panel bg).
- */
+   
+                                                                                       
+                                                                                                
+   
 export function tagChipOutlinedRestSx(theme: Theme, color: TagOption["color"]) {
   if (color === "default") {
     return {

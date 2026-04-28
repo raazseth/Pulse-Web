@@ -2,9 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { DESKTOP_SENTINEL } from "@/shared/constants/auth";
 
-// ---------------------------------------------------------------------------
-// Module mocks — must be declared before importing the hook
-// ---------------------------------------------------------------------------
+
+
+
 
 vi.mock("@/modules/transcript/services/transcriptSocket", () => ({
   createTranscriptSocket: vi.fn(),
@@ -32,9 +32,9 @@ import type {
 } from "@/modules/transcript/types";
 import { useTranscriptStream } from "./useTranscriptStream";
 
-// ---------------------------------------------------------------------------
-// Socket mock helpers
-// ---------------------------------------------------------------------------
+
+
+
 
 type MsgHandler = (msg: TranscriptSocketServerMessage) => void;
 
@@ -95,10 +95,6 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-// ---------------------------------------------------------------------------
-// Connection lifecycle
-// ---------------------------------------------------------------------------
-
 describe("useTranscriptStream — connection lifecycle", () => {
   it("starts with status 'connecting'", () => {
     const { result } = renderHook(() =>
@@ -150,10 +146,6 @@ describe("useTranscriptStream — connection lifecycle", () => {
 
 });
 
-// ---------------------------------------------------------------------------
-// Reconnect logic
-// ---------------------------------------------------------------------------
-
 describe("useTranscriptStream — reconnect", () => {
   it("sets status 'reconnecting' on clean close", async () => {
     const { result } = renderHook(() =>
@@ -189,15 +181,10 @@ describe("useTranscriptStream — reconnect", () => {
     await act(async () => { callbacks.onClose(false); });
     unmount();
 
-    // Advancing past the timer should NOT create a second socket
     await act(async () => { vi.advanceTimersByTime(2000); });
     expect(createTranscriptSocket).toHaveBeenCalledTimes(1);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Token rotation — no reconnect when accessToken prop changes
-// ---------------------------------------------------------------------------
 
 describe("useTranscriptStream — token rotation", () => {
   it("does NOT create a new socket when accessToken prop changes", () => {
@@ -208,7 +195,6 @@ describe("useTranscriptStream — token rotation", () => {
     );
 
     rerender({ token: "token-v2" });
-    // Only the initial connect — no second createTranscriptSocket call
     expect(createTranscriptSocket).toHaveBeenCalledTimes(1);
   });
 
@@ -221,7 +207,6 @@ describe("useTranscriptStream — token rotation", () => {
 
     rerender({ token: "token-v2" });
 
-    // Trigger reconnect
     await act(async () => { callbacks.onClose(false); });
     await act(async () => { vi.advanceTimersByTime(1600); });
 
@@ -229,10 +214,6 @@ describe("useTranscriptStream — token rotation", () => {
     expect(secondCall?.token).toBe("token-v2");
   });
 });
-
-// ---------------------------------------------------------------------------
-// Incoming message handling
-// ---------------------------------------------------------------------------
 
 describe("useTranscriptStream — session:state", () => {
   it("populates items from session:state payload", async () => {
@@ -289,12 +270,10 @@ describe("useTranscriptStream — transcript:chunk", () => {
     const { result } = renderHook(() =>
       useTranscriptStream({ sessionId: "s1" }),
     );
-    // Load 800 items via session:state
     const items = Array.from({ length: 800 }, (_, i) => makeItem(`i${i}`));
     await act(async () => {
       callbacks.onMessage({ type: "session:state", payload: makeSessionState(items) });
     });
-    // Add one more via chunk
     await act(async () => {
       callbacks.onMessage({ type: "transcript:chunk", payload: makeItem("overflow") });
     });
@@ -410,10 +389,6 @@ describe("useTranscriptStream — error message", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// sessionId change — clear and reload
-// ---------------------------------------------------------------------------
-
 describe("useTranscriptStream — sessionId change", () => {
   it("clears items immediately when sessionId changes", async () => {
     const { result, rerender } = renderHook(
@@ -440,14 +415,10 @@ describe("useTranscriptStream — sessionId change", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// IDB restore and save
-// ---------------------------------------------------------------------------
-
 describe("useTranscriptStream — IDB restore", () => {
   it("calls loadSession with the current sessionId on mount", async () => {
     renderHook(() => useTranscriptStream({ sessionId: "s-idb" }));
-    await act(async () => {});
+    await act(async () => { });
     expect(loadSession).toHaveBeenCalledWith("s-idb");
   });
 
@@ -462,7 +433,7 @@ describe("useTranscriptStream — IDB restore", () => {
     const { result } = renderHook(() =>
       useTranscriptStream({ sessionId: "s1" }),
     );
-    await act(async () => {});
+    await act(async () => { });
     expect(result.current.items[0]?.id).toBe("old1");
   });
 
@@ -471,7 +442,7 @@ describe("useTranscriptStream — IDB restore", () => {
     const { result } = renderHook(() =>
       useTranscriptStream({ sessionId: "s1" }),
     );
-    await act(async () => {});
+    await act(async () => { });
     expect(result.current.items).toHaveLength(0);
   });
 });
@@ -500,17 +471,12 @@ describe("useTranscriptStream — IDB save debounce", () => {
       callbacks.onMessage({ type: "transcript:chunk", payload: makeItem("i2") });
     });
     await act(async () => { vi.advanceTimersByTime(1000); });
-    // Total elapsed 2000ms but timer was reset — not yet 2000ms since last chunk
     expect(saveSession).not.toHaveBeenCalled();
 
     await act(async () => { vi.advanceTimersByTime(1000); });
     expect(saveSession).toHaveBeenCalledOnce();
   });
 });
-
-// ---------------------------------------------------------------------------
-// sendChunk action
-// ---------------------------------------------------------------------------
 
 describe("useTranscriptStream — sendChunk", () => {
   it("returns false and does not send when socket is not OPEN", () => {
@@ -582,10 +548,6 @@ describe("useTranscriptStream — sendChunk", () => {
     expect(result.current.items[0].id).not.toBe(pendingId);
   });
 });
-
-// ---------------------------------------------------------------------------
-// createTag action
-// ---------------------------------------------------------------------------
 
 describe("useTranscriptStream — createTag", () => {
   it("returns false and does not send when socket is not OPEN", () => {

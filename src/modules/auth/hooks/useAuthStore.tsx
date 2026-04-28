@@ -10,11 +10,11 @@ import { apiLogin, apiLogout, apiRefresh, apiRegister } from "@/modules/auth/api
 import { AuthState, AuthUser, TokenPair } from "@/modules/auth/types";
 import { DESKTOP_SENTINEL } from "@/shared/constants/auth";
 
-// Access token: React state only (memory). Never persisted.
-// Refresh token: httpOnly, Secure, SameSite=Strict cookie set by the server.
-//   The client never reads or writes it — it travels automatically via
-//   credentials: "include" on every auth request.
-// User display info: localStorage (not sensitive, used only for UI rendering).
+
+
+
+
+
 const LS_USER = "pulse_user";
 
 function isElectron(): boolean {
@@ -48,8 +48,8 @@ interface AuthContext extends AuthState {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
-  /** Attempt a silent token refresh via the httpOnly cookie. Returns the new
-   *  access token, or null if the cookie is absent/expired (user must re-login). */
+                                                                             
+                                                                                    
   refreshAccessToken: () => Promise<string | null>;
 }
 
@@ -63,9 +63,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return { accessToken: null, user: loadStoredUser(), isLoading: true };
   });
 
-  // On mount, silently refresh using the httpOnly cookie. The browser sends the
-  // cookie automatically (credentials: "include" is set in authApi). If the
-  // cookie is absent or expired the call fails and we clear state.
+  
+  
+  
   useEffect(() => {
     if (isElectron()) return;
 
@@ -94,9 +94,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
   }, []);
 
-  // Proactively refresh the access token before it expires (TTL is 15 min,
-  // refresh every 12 min) so WebSocket reconnects and API calls always have
-  // a valid token — avoids the "expired token → 401 → reconnect loop" failure.
+  
+  
+  
   useEffect(() => {
     if (isElectron() || !state.user) return;
     const id = setInterval(refreshAccessToken, 12 * 60 * 1000);
@@ -105,8 +105,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const login = useCallback(async (email: string, password: string) => {
     const { user, tokens } = await apiLogin(email, password);
-    // The server sets the refresh token as an httpOnly cookie in the response.
-    // We only store the user (display info) and keep the access token in state.
+    
+    
     persistUser(user);
     setState({ user, accessToken: tokens.accessToken, isLoading: false });
   }, []);
@@ -119,7 +119,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const logout = useCallback(async () => {
     if (!isElectron()) {
-      // Server receives the httpOnly cookie and invalidates it server-side.
+      
       await apiLogout().catch(() => undefined);
     }
     clearStorage();

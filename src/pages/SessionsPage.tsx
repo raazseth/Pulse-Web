@@ -40,15 +40,13 @@ import { SessionStatus, SessionNote } from "@/modules/context/types";
 import { fetchWithAuth } from "@/shared/utils/fetchWithAuth";
 import { getHudNotesUrl } from "@/shared/utils/hudApi";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function relativeDate(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
-  const mins  = Math.floor(diff / 60_000);
+  const mins = Math.floor(diff / 60_000);
   const hours = Math.floor(diff / 3_600_000);
-  const days  = Math.floor(diff / 86_400_000);
-  if (mins < 1)   return "Just now";
-  if (mins < 60)  return `${mins}m ago`;
+  const days = Math.floor(diff / 86_400_000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
   if (hours < 24) return `${hours}h ago`;
   if (days === 1) return "Yesterday";
   return `${days}d ago`;
@@ -67,9 +65,9 @@ const confirmIn = keyframes`
 `;
 
 const STATUS_STYLE: Record<SessionStatus, { color: string; bg: string; border: string; dot: string; label: string }> = {
-  active: { color: "#0A7554", bg: "rgba(20,159,119,0.10)", border: "rgba(20,159,119,0.24)", dot: "#149F77", label: "Live"   },
-  paused: { color: "#B76E00", bg: "rgba(255,171,0,0.10)",  border: "rgba(255,171,0,0.24)",  dot: "#FFAB00", label: "Paused" },
-  ended:  { color: "#637381", bg: "rgba(145,158,171,0.10)", border: "rgba(145,158,171,0.24)", dot: "#919EAB", label: "Ended"  },
+  active: { color: "#0A7554", bg: "rgba(20,159,119,0.10)", border: "rgba(20,159,119,0.24)", dot: "#149F77", label: "Live" },
+  paused: { color: "#B76E00", bg: "rgba(255,171,0,0.10)", border: "rgba(255,171,0,0.24)", dot: "#FFAB00", label: "Paused" },
+  ended: { color: "#637381", bg: "rgba(145,158,171,0.10)", border: "rgba(145,158,171,0.24)", dot: "#919EAB", label: "Ended" },
 };
 
 function StatusBadge({ status }: { status: SessionStatus }) {
@@ -87,8 +85,6 @@ function StatusBadge({ status }: { status: SessionStatus }) {
     </Box>
   );
 }
-
-// ─── Session row ──────────────────────────────────────────────────────────────
 
 function SessionTableRow({
   session,
@@ -120,14 +116,14 @@ function SessionTableRow({
         bgcolor: confirming
           ? "rgba(239,68,68,0.04)"
           : isActive
-          ? "rgba(20,159,119,0.06)"
-          : "transparent",
+            ? "rgba(20,159,119,0.06)"
+            : "transparent",
         "&:hover": {
           bgcolor: confirming
             ? "rgba(239,68,68,0.06)"
             : isActive
-            ? "rgba(20,159,119,0.10)"
-            : alpha("#919EAB", 0.06),
+              ? "rgba(20,159,119,0.10)"
+              : alpha("#919EAB", 0.06),
         },
       }}
     >
@@ -187,7 +183,6 @@ function SessionTableRow({
         )}
       </TableCell>
 
-      {/* Set Active — second-to-last column */}
       <TableCell sx={{ width: 140, pr: 1 }}>
         <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
           {!confirming && (
@@ -229,7 +224,6 @@ function SessionTableRow({
         </Box>
       </TableCell>
 
-      {/* Delete — last column, far right */}
       <TableCell sx={{ width: 56, pr: 2, pl: 0 }}>
         <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
           {confirming ? (
@@ -269,8 +263,6 @@ function SessionTableRow({
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
 type FilterTab = "all" | SessionStatus;
 
 export function SessionsPage() {
@@ -289,15 +281,13 @@ export function SessionsPage() {
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
 
-  // ── Stats ─────────────────────────────────────────────────────────────────
   const counts = {
-    all:    sessions.length,
+    all: sessions.length,
     active: sessions.filter((s) => s.status === "active").length,
     paused: sessions.filter((s) => s.status === "paused").length,
-    ended:  sessions.filter((s) => s.status === "ended").length,
+    ended: sessions.filter((s) => s.status === "ended").length,
   };
 
-  // ── Filtered list ─────────────────────────────────────────────────────────
   const visible = sessions.filter((s) => {
     if (filter !== "all" && s.status !== filter) return false;
     if (search.trim()) {
@@ -307,19 +297,18 @@ export function SessionsPage() {
     return true;
   });
 
-  // ── Set active ────────────────────────────────────────────────────────────
   const handleSetActive = useCallback(async (s: SessionSummary) => {
     if (s.id === session.sessionId) { navigate("/"); return; }
     const prevId = session.sessionId;
     const prevStatus = session.sessionStatus;
     if (prevId && prevStatus === "active") {
-      updateStatus(prevId, "paused").catch(() => {});
+      updateStatus(prevId, "paused").catch(() => { });
     }
     setActivatingId(s.id);
     session.setSessionId(s.id);
     session.setSessionStatus("active");
     session.updateMetadata({ title: s.title });
-    updateStatus(s.id, "active").catch(() => {});
+    updateStatus(s.id, "active").catch(() => { });
     try {
       const res = await fetchWithAuth(getHudNotesUrl(s.id), {}, () => accessToken, refreshAccessToken);
       if (res.ok) {
@@ -327,14 +316,12 @@ export function SessionsPage() {
         if (Array.isArray(json.data)) session.updateNotes(json.data);
       }
     } catch {
-      // keep existing notes
     } finally {
       setActivatingId(null);
       navigate("/");
     }
   }, [session, accessToken, refreshAccessToken, navigate, updateStatus]);
 
-  // ── Create session ────────────────────────────────────────────────────────
   const handleCreate = useCallback(async () => {
     if (!newTitle.trim()) return;
     setCreating(true);
@@ -352,13 +339,11 @@ export function SessionsPage() {
       setNewTitle("");
       navigate("/");
     } catch {
-      // server offline
     } finally {
       setCreating(false);
     }
   }, [newTitle, createSession, session, navigate]);
 
-  // ── Delete session ────────────────────────────────────────────────────────
   const handleDeleteConfirm = useCallback(async (id: string) => {
     setDeletingId(id);
     try {
@@ -370,17 +355,14 @@ export function SessionsPage() {
       setConfirmingDeleteId(null);
       await refetch();
     } catch {
-      // server offline
     } finally {
       setDeletingId(null);
     }
   }, [deleteSession, refetch, session]);
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <Box sx={{ px: { xs: 2, md: 4 }, py: { xs: 3, md: 4 }, maxWidth: 1100, mx: "auto" }}>
 
-      {/* ── Header ── */}
       <Stack
         direction={{ xs: "column", sm: "row" }}
         spacing={2}
@@ -411,7 +393,7 @@ export function SessionsPage() {
             size="small"
             variant="outlined"
             startIcon={<RefreshRoundedIcon sx={{ fontSize: "1rem" }} />}
-            onClick={() => refetch().catch(() => {})}
+            onClick={() => refetch().catch(() => { })}
             disabled={loading}
             sx={{
               height: 36, borderRadius: "8px",
@@ -435,7 +417,6 @@ export function SessionsPage() {
         </Stack>
       </Stack>
 
-      {/* ── Table card ── */}
       <Box sx={{
         borderRadius: "14px",
         border: `1px solid ${alpha("#919EAB", 0.16)}`,
@@ -444,7 +425,6 @@ export function SessionsPage() {
         boxShadow: `0 0 2px 0 ${alpha("#919EAB", 0.14)}, 0 8px 20px -4px ${alpha("#919EAB", 0.08)}`,
       }}>
 
-        {/* Toolbar */}
         <Box sx={{
           px: 2.5, pt: 1.5, pb: 1,
           display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap",
@@ -464,10 +444,10 @@ export function SessionsPage() {
               "& .MuiTabs-indicator": { bgcolor: "#149F77", height: 2, borderRadius: 2 },
             }}
           >
-            <Tab value="all"    label={`All (${counts.all})`} />
+            <Tab value="all" label={`All (${counts.all})`} />
             <Tab value="active" label={`Live (${counts.active})`} />
             <Tab value="paused" label={`Paused (${counts.paused})`} />
-            <Tab value="ended"  label={`Ended (${counts.ended})`} />
+            <Tab value="ended" label={`Ended (${counts.ended})`} />
           </Tabs>
 
           <Box sx={{ flex: 1 }} />
@@ -500,7 +480,6 @@ export function SessionsPage() {
 
         <Divider />
 
-        {/* Table */}
         <TableContainer>
           <Table>
             <TableHead>
@@ -591,7 +570,6 @@ export function SessionsPage() {
           </Table>
         </TableContainer>
 
-        {/* Footer row count */}
         {!loading && visible.length > 0 && (
           <Box sx={{
             px: 3, py: 1.5,
@@ -605,7 +583,6 @@ export function SessionsPage() {
         )}
       </Box>
 
-      {/* ── New Session Dialog ── */}
       <Dialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}

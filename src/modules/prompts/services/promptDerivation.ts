@@ -50,7 +50,7 @@ const RULES: Rule[] = [
   },
 ];
 
-// Fallback prompts shown when no rules match — keeps the panel populated.
+
 const FALLBACK_TITLES = [
   "Ask for an example",
   "Ask how often this happens",
@@ -91,7 +91,6 @@ export function derivePromptSuggestions(
     if (matched.length >= 4) break;
   }
 
-  // If fewer than 2 matched suggestions, pad with fallbacks from the latest item.
   if (matched.length < 2) {
     const tail = items.slice(-Math.min(6, items.length));
     const usedTitles = new Set(matched.map((s) => s.title));

@@ -2,12 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useMicCapture } from "./useMicCapture";
 
-// ---------------------------------------------------------------------------
-// MediaRecorder mock
-//
-// jsdom does not include MediaRecorder. We stub the global with a class-like
-// mock that exposes event handler slots so tests can trigger events manually.
-// ---------------------------------------------------------------------------
+
+
+
+
+
+
 
 interface RecorderSlots {
   ondataavailable: ((e: { data: Blob }) => void) | null;
@@ -20,7 +20,7 @@ function makeRecorderMock() {
 
   const rec = {
     start: vi.fn(),
-    // stop() calls onstop synchronously, mirroring real MediaRecorder behaviour.
+    
     stop: vi.fn().mockImplementation(() => slots.onstop?.()),
     get ondataavailable() { return slots.ondataavailable; },
     set ondataavailable(fn: RecorderSlots["ondataavailable"]) { slots.ondataavailable = fn; },
@@ -30,9 +30,9 @@ function makeRecorderMock() {
     set onstop(fn: RecorderSlots["onstop"]) { slots.onstop = fn; },
   };
 
-  // Must be a regular function, NOT an arrow function — arrow functions cannot
-  // be called with `new` and throw TypeError inside the hook's try block.
-  // Returning an object from a constructor causes `new Ctor()` to yield that object.
+  
+  
+  
   const Ctor = Object.assign(
     function MockMediaRecorder() { return rec; },
     { isTypeSupported: vi.fn(() => true) },
@@ -45,9 +45,9 @@ function makeStreamMock() {
   return { getTracks: () => [{ stop: vi.fn() }] };
 }
 
-// ---------------------------------------------------------------------------
-// Per-test setup
-// ---------------------------------------------------------------------------
+
+
+
 
 let recorder: ReturnType<typeof makeRecorderMock>;
 
@@ -66,9 +66,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// ---------------------------------------------------------------------------
-// Initial state
-// ---------------------------------------------------------------------------
+
+
+
 
 describe("useMicCapture — initial state", () => {
   it("starts not-listening with no error", () => {
@@ -89,9 +89,9 @@ describe("useMicCapture — initial state", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// start()
-// ---------------------------------------------------------------------------
+
+
+
 
 describe("useMicCapture — start()", () => {
   it("does not start the recorder if stop() runs while getUserMedia is pending", async () => {
@@ -128,7 +128,7 @@ describe("useMicCapture — start()", () => {
   });
 
   it("sets error='Microphone permission denied' when getUserMedia rejects with NotAllowedError", async () => {
-    // DOMException.name is read-only — pass the name as the second constructor arg.
+    
     vi.stubGlobal("navigator", {
       mediaDevices: {
         getUserMedia: vi.fn().mockRejectedValue(
@@ -159,39 +159,39 @@ describe("useMicCapture — start()", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// stop() — abort in-flight requests
-// ---------------------------------------------------------------------------
+
+
+
 
 describe("useMicCapture — stop() aborts in-flight requests", () => {
   it("aborts the fetch signal for an active audio upload when stop() is called", async () => {
     let capturedSignal: AbortSignal | undefined;
     vi.stubGlobal("fetch", vi.fn().mockImplementation((_url: string, opts: RequestInit) => {
       capturedSignal = opts.signal as AbortSignal;
-      return new Promise(() => {}); // never resolves — simulates a slow/hanging upload
+      return new Promise(() => {}); 
     }));
 
     const { result } = renderHook(() => useMicCapture({ onChunk: vi.fn() }));
     await act(async () => { await result.current.start(); });
 
-    // Fire a data chunk large enough to pass the 100-byte guard.
-    // The ondataavailable handler is async — we need two flush passes:
-    //   pass 1: the handler runs up to `await fetch(...)`, which calls our mock
-    //           synchronously (assigns capturedSignal) then suspends.
-    //   pass 2: settle any trailing microtasks from the handler setup.
+    
+    
+    
+    
+    
     await act(async () => {
       recorder.slots.ondataavailable?.({
         data: new Blob(["x".repeat(200)], { type: "audio/webm" }),
       });
-      await Promise.resolve(); // flush to the first await in the handler
+      await Promise.resolve(); 
     });
 
     expect(capturedSignal).toBeDefined();
-    expect(capturedSignal!.aborted).toBe(false); // not aborted yet
+    expect(capturedSignal!.aborted).toBe(false); 
 
     act(() => { result.current.stop(); });
 
-    expect(capturedSignal!.aborted).toBe(true); // aborted by stop()
+    expect(capturedSignal!.aborted).toBe(true); 
     expect(result.current.isListening).toBe(false);
   });
 
@@ -203,16 +203,16 @@ describe("useMicCapture — stop() aborts in-flight requests", () => {
     await act(async () => { await result.current.start(); });
 
     await act(async () => {
-      recorder.slots.ondataavailable?.({ data: new Blob(["tiny"]) }); // < 100 bytes
+      recorder.slots.ondataavailable?.({ data: new Blob(["tiny"]) }); 
     });
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
-// ---------------------------------------------------------------------------
-// onChunk callback
-// ---------------------------------------------------------------------------
+
+
+
 
 describe("useMicCapture — onChunk callback", () => {
   it("calls onChunk with trimmed text when fetch returns a transcription", async () => {
@@ -230,7 +230,7 @@ describe("useMicCapture — onChunk callback", () => {
         data: new Blob(["x".repeat(200)], { type: "audio/webm" }),
       });
     });
-    await act(async () => {}); // flush fetch promise chain
+    await act(async () => {}); 
 
     expect(onChunk).toHaveBeenCalledWith("hello world");
   });

@@ -3,7 +3,7 @@ export interface TranscriptItem {
   text: string;
   timestamp: string;
   speakerId: string;
-  /** Pre-formatted HH:MM:SS clock string — computed once at ingestion time. */
+                                                                               
   formattedTime: string;
 }
 

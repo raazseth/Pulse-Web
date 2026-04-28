@@ -78,11 +78,11 @@ export function SessionStoreProvider({ children }: PropsWithChildren) {
     window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(state));
   }, [state]);
 
-  // All action functions use useCallback(fn, []) because they only need the
-  // stable setState dispatcher — they do not close over state directly.
-  // This ensures the references never change between renders, preventing
-  // downstream useCallback hooks from recreating and WebSocket effects from
-  // reconnecting on unrelated state changes (defect #13).
+  
+  
+  
+  
+  
   const focusTag = useCallback((tagId: string) => {
     setState((s) => ({ ...s, focusedTagId: tagId }));
   }, []);
@@ -159,7 +159,7 @@ export function SessionStoreProvider({ children }: PropsWithChildren) {
       removeNote,
       updateNoteTags,
     }),
-    // State changes re-compute the spread (...state) while action refs stay stable.
+    
     [state, focusTag, selectTranscript, setSessionId, setSessionStatus, setTags, upsertTag, updateMetadata, updateNotes, addNote, removeNote, updateNoteTags],
   );
 

@@ -44,9 +44,7 @@ export function PwaInstallBanner() {
   const dismiss = useCallback(() => {
     try {
       sessionStorage.setItem(DISMISS_KEY, "1");
-    } catch {
-      /* ignore */
-    }
+    } catch {}
     setDismissed(true);
   }, []);
 
@@ -55,9 +53,7 @@ export function PwaInstallBanner() {
     await deferredPrompt.prompt();
     try {
       await deferredPrompt.userChoice;
-    } catch {
-      /* ignore */
-    }
+    } catch {}
     setDeferredPrompt(null);
     dismiss();
   }, [deferredPrompt, dismiss]);

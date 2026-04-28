@@ -21,7 +21,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/modules/auth/hooks/useAuthStore";
 import { useToast } from "@/shared/components/Toast";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+
 
 const LEFT_GRADIENT =
   "linear-gradient(155deg, #083d2a 0%, #0e6647 35%, #149F77 70%, #1ebd8e 100%)";
@@ -32,7 +32,7 @@ const BTN_GRADIENT =
 const BTN_GRADIENT_HOVER =
   "linear-gradient(135deg, #083d2a 0%, #0e7a5a 55%, #18aa82 100%)";
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+
 
 function PulseLogo() {
   return (
@@ -65,7 +65,7 @@ function PulseLogo() {
 function LeftPanelDecorations() {
   return (
     <>
-      {/* Large filled circle — bottom-left */}
+      {                                       }
       <Box
         aria-hidden
         sx={{
@@ -79,7 +79,7 @@ function LeftPanelDecorations() {
           pointerEvents: "none",
         }}
       />
-      {/* Outer ring */}
+      {                }
       <Box
         aria-hidden
         sx={{
@@ -93,7 +93,7 @@ function LeftPanelDecorations() {
           pointerEvents: "none",
         }}
       />
-      {/* Small accent circle — upper right */}
+      {                                       }
       <Box
         aria-hidden
         sx={{
@@ -111,7 +111,7 @@ function LeftPanelDecorations() {
   );
 }
 
-// ─── Shared input style (forces light appearance inside dark MUI theme) ───────
+
 
 const INPUT_SX = {
   "& .MuiOutlinedInput-root": {
@@ -125,7 +125,7 @@ const INPUT_SX = {
     },
     "& input": { color: "#111827", fontSize: "0.9375rem" },
     "& input::placeholder": { color: "#9CA3AF", opacity: 1 },
-    // Suppress browser autofill blue/yellow highlight
+    
     "& input:-webkit-autofill": {
       WebkitBoxShadow: "0 0 0 1000px #F9FAFB inset",
       WebkitTextFillColor: "#111827",
@@ -147,7 +147,7 @@ const INPUT_SX = {
   "& .MuiOutlinedInput-root.Mui-error fieldset": { borderColor: "#FCA5A5" },
 } as const;
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+
 
 export function AuthPage() {
   const { login, register } = useAuth();
@@ -195,7 +195,7 @@ export function AuthPage() {
   return (
     <Box sx={{ display: "flex", minHeight: "100vh" }}>
 
-      {/* ── LEFT PANEL ─────────────────────────────────────── */}
+      {                                                           }
       <Box
         sx={{
           display: { xs: "none", md: "flex" },
@@ -211,7 +211,7 @@ export function AuthPage() {
       >
         <LeftPanelDecorations />
 
-        {/* Bottom copy */}
+        {                 }
         <Stack spacing={2} sx={{ position: "relative", zIndex: 1 }}>
           <Typography
             sx={{
@@ -250,7 +250,7 @@ export function AuthPage() {
             AI-powered prompts and live transcription so you never miss a moment during qualitative interviews.
           </Typography>
 
-          {/* Feature list */}
+          {                  }
           <Stack spacing={1.5} sx={{ pt: 1 }}>
             {[
               "Live transcript capture",
@@ -276,7 +276,7 @@ export function AuthPage() {
         </Stack>
       </Box>
 
-      {/* ── RIGHT PANEL ────────────────────────────────────── */}
+      {                                                           }
       <Box
         sx={{
           flex: 1,
@@ -292,7 +292,7 @@ export function AuthPage() {
       >
         <Box sx={{ width: "100%", maxWidth: 392 }}>
 
-          {/* Logo + heading */}
+          {                    }
           <Stack spacing={1.5} sx={{ mb: 4, alignItems: "center" }}>
             <PulseLogo />
             <Box sx={{ textAlign: "center" }}>
@@ -315,7 +315,7 @@ export function AuthPage() {
             </Box>
           </Stack>
 
-          {/* Form */}
+          {          }
           <Stack component="form" spacing={2.5} onSubmit={handleSubmit} noValidate>
             {!isLogin && (
               <TextField
@@ -461,7 +461,7 @@ export function AuthPage() {
             </Button>
           </Stack>
 
-          {/* Trouble signing in */}
+          {                        }
           {isLogin && (
             <Box sx={{ mt: 2.5, textAlign: "center" }}>
               <Link
@@ -483,7 +483,7 @@ export function AuthPage() {
             </Box>
           )}
 
-          {/* Switch mode */}
+          {                 }
           <Box sx={{ mt: 2.5, textAlign: "center" }}>
             <Typography sx={{ color: "#9CA3AF", fontSize: "0.875rem" }}>
               {isLogin ? "Don't have an account? " : "Already have an account? "}
@@ -507,7 +507,7 @@ export function AuthPage() {
             </Typography>
           </Box>
 
-          {/* Terms footer */}
+          {                  }
           <Stack
             direction="row"
             spacing={3}

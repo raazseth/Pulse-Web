@@ -31,7 +31,7 @@ export interface CreateSessionPayload {
 interface SessionListContextValue {
   sessions: SessionSummary[];
   loading: boolean;
-  /** True only after a successful GET /sessions for the current access token (not failed/401). */
+                                                                                                  
   listLoadSucceeded: boolean;
   refetch: () => Promise<void>;
   createSession: (payload: CreateSessionPayload) => Promise<SessionSummary>;

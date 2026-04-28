@@ -37,8 +37,6 @@ import { LiveDot } from "@/shared/components/LiveDot";
 import { useNavigate } from "react-router-dom";
 import { useTranscriptHud } from "@/modules/transcript/context/TranscriptHudContext";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 interface TopBarProps {
   sidebarWidth: number;
   topbarHeight: number;
@@ -54,8 +52,6 @@ function initials(name: string) {
 function truncate(str: string, max: number) {
   return str.length > max ? `${str.slice(0, max)}…` : str;
 }
-
-// ─── Settings drawer ──────────────────────────────────────────────────────────
 
 function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user, logout } = useAuth();
@@ -118,12 +114,12 @@ function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void 
       if (!found) { setJoinError("No session found with that ID."); return; }
       const prevId = session.sessionId;
       if (prevId && session.sessionStatus === "active") {
-        updateSessionStatus(prevId, "paused").catch(() => {});
+        updateSessionStatus(prevId, "paused").catch(() => { });
       }
       session.setSessionId(found.id);
       session.setSessionStatus("active");
       session.updateMetadata({ title: found.title });
-      updateSessionStatus(found.id, "active").catch(() => {});
+      updateSessionStatus(found.id, "active").catch(() => { });
       setJoinId("");
       onClose();
       navigate("/");
@@ -143,10 +139,10 @@ function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void 
   };
 
   const metaRows = [
-    session.metadata.title       && { label: "Title",       value: session.metadata.title },
+    session.metadata.title && { label: "Title", value: session.metadata.title },
     session.metadata.facilitator && { label: "Facilitator", value: session.metadata.facilitator },
-    session.metadata.audience    && { label: "Audience",    value: session.metadata.audience },
-    session.metadata.role        && { label: "Role",        value: session.metadata.role },
+    session.metadata.audience && { label: "Audience", value: session.metadata.audience },
+    session.metadata.role && { label: "Role", value: session.metadata.role },
   ].filter(Boolean) as { label: string; value: string }[];
 
   return (
@@ -169,7 +165,6 @@ function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void 
     >
       <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
 
-        {/* Header */}
         <Box
           sx={{
             px: 2.5, py: 1.75,
@@ -189,11 +184,9 @@ function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void 
           </IconButton>
         </Box>
 
-        {/* Scrollable body */}
         <Box sx={{ flex: 1, overflowY: "auto", px: 2.5, py: 2.5 }}>
           <Stack spacing={3}>
 
-            {/* Account */}
             <Box>
               <Typography sx={{ fontSize: "0.625rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.disabled", mb: 1.5 }}>
                 Account
@@ -215,7 +208,6 @@ function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void 
 
             <Divider />
 
-            {/* Active session */}
             <Box>
               <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.5 }}>
                 <Typography sx={{ fontSize: "0.625rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.disabled" }}>
@@ -225,7 +217,6 @@ function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void 
               </Box>
 
               <Box sx={{ borderRadius: "12px", border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
-                {/* Session ID block */}
                 <Box sx={{ px: 2, py: 1.5, bgcolor: "grey.100", borderBottom: metaRows.length > 0 ? "1px solid" : "none", borderColor: "divider" }}>
                   <Typography sx={{ fontSize: "0.5625rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "text.disabled", mb: 0.75 }}>
                     Session ID
@@ -251,9 +242,8 @@ function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void 
                   </Box>
                 </Box>
 
-                {/* Metadata rows */}
                 {metaRows.length > 0 && (() => {
-                  const titleRow  = metaRows.find(r => r.label === "Title");
+                  const titleRow = metaRows.find(r => r.label === "Title");
                   const otherRows = metaRows.filter(r => r.label !== "Title");
                   const cellLabel = (text: string) => (
                     <Typography sx={{ fontSize: "0.5625rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "text.disabled", mb: 0.3 }}>
@@ -291,7 +281,6 @@ function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void 
 
             <Divider />
 
-            {/* Export */}
             <Box>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 1.5 }}>
                 <DownloadRoundedIcon sx={{ fontSize: "0.875rem", color: "text.disabled" }} />
@@ -346,7 +335,6 @@ function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void 
 
             <Divider />
 
-            {/* Join Session */}
             <Box>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 1.5 }}>
                 <LoginRoundedIcon sx={{ fontSize: "0.875rem", color: "text.disabled" }} />
@@ -395,7 +383,6 @@ function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void 
           </Stack>
         </Box>
 
-        {/* Sign out — pinned to bottom */}
         <Box sx={{ flexShrink: 0, borderTop: "1px solid", borderColor: "divider", px: 2.5, py: 2 }}>
           {confirmingLogout ? (
             <Box>
@@ -429,8 +416,6 @@ function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void 
   );
 }
 
-// ─── TopBar ───────────────────────────────────────────────────────────────────
-
 export function TopBar({
   sidebarWidth,
   topbarHeight,
@@ -455,7 +440,7 @@ export function TopBar({
     const prevStatus = session.sessionStatus;
     try {
       if (prevId && prevStatus === "active") {
-        updateSessionStatus(prevId, "paused").catch(() => {});
+        updateSessionStatus(prevId, "paused").catch(() => { });
       }
       const created = await createSession({
         title: createTitle.trim(),
@@ -470,7 +455,6 @@ export function TopBar({
       setCreateTitle("");
       navigate("/");
     } catch {
-      // server offline
     } finally {
       setCreating(false);
     }
@@ -482,7 +466,6 @@ export function TopBar({
         position="fixed"
         elevation={0}
         sx={{
-          // Stay below temporary Drawer (zIndex.drawer) so the mobile nav is not covered by the bar.
           zIndex: (theme) => theme.zIndex.appBar,
           width: { lg: `calc(100% - ${sidebarWidth}px)` },
           ml: { lg: `${sidebarWidth}px` },
@@ -599,7 +582,6 @@ export function TopBar({
         </Toolbar>
       </AppBar>
 
-      {/* ── New Session Dialog ── */}
       <Dialog
         open={createOpen}
         onClose={() => { setCreateOpen(false); setCreateTitle(""); }}

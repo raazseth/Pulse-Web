@@ -8,9 +8,9 @@ interface UseHudContextApiOptions {
   refreshAccessToken: () => Promise<string | null>;
 }
 
-/**
- * PATCH /hud/sessions/:id/context — merges `context` JSON and updates title/facilitator/audience/role columns when those keys are present.
- */
+   
+                                                                                                                                           
+   
 export function useHudContextApi({
   sessionId,
   accessToken,

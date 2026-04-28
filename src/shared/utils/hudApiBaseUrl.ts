@@ -39,7 +39,6 @@ function isFileDocument(): boolean {
 export function resolveHudApiBaseUrl(): string {
   const fromEnv = import.meta.env.VITE_HUD_API_URL;
 
-  // Electron `loadFile` → file:// — relative /api/v1 becomes file:///E:/api/... (broken).
   if (isFileDocument()) {
     const p = getElectronEmbeddedServerPort();
     if (p) return `http://127.0.0.1:${p}/api/v1`;
@@ -61,7 +60,6 @@ export function resolveHudApiBaseUrl(): string {
   }
 
   if (mode === "production") {
-    // Vercel (or any same-origin https host): vercel.json rewrites /api/* → Cloud Run.
     return "/api/v1";
   }
 

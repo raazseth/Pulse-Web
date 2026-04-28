@@ -5,9 +5,9 @@ import {
   sendTranscriptTag,
 } from "./transcriptSocket";
 
-// ---------------------------------------------------------------------------
-// Minimal WebSocket mock
-// ---------------------------------------------------------------------------
+
+
+
 
 type EventHandler = (event?: unknown) => void;
 
@@ -30,7 +30,7 @@ class MockWebSocket {
     this.readyState = WebSocket.CLOSED;
   }
 
-  // Test helper — trigger a lifecycle event
+  
   trigger(type: string, event?: unknown) {
     for (const handler of this.listeners.get(type) ?? []) {
       handler(event);
@@ -42,7 +42,7 @@ let mockSocket: MockWebSocket;
 
 beforeEach(() => {
   mockSocket = new MockWebSocket();
-  // Attach the WS readyState constants so sendTranscript* guards work correctly.
+  
   const MockWS = Object.assign(function () { return mockSocket; }, {
     CONNECTING: 0,
     OPEN: 1,
@@ -56,9 +56,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-// ---------------------------------------------------------------------------
-// createTranscriptSocket — URL + token
-// ---------------------------------------------------------------------------
+
+
+
 
 describe("createTranscriptSocket — URL construction", () => {
   it("connects to the plain URL when no token is supplied", () => {
@@ -92,9 +92,9 @@ describe("createTranscriptSocket — URL construction", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// createTranscriptSocket
-// ---------------------------------------------------------------------------
+
+
+
 
 describe("createTranscriptSocket — open", () => {
   it("calls onOpen when the socket opens", () => {
@@ -177,18 +177,18 @@ describe("createTranscriptSocket — error and close ordering", () => {
     createTranscriptSocket({ url: "ws://x", sessionId: "s", onOpen: vi.fn(), onError: vi.fn(), onClose, onMessage: vi.fn() });
     mockSocket.trigger("error");
     mockSocket.trigger("close");
-    // Simulate a new open (reconnect succeeded)
+    
     mockSocket.trigger("open");
-    // Next close is clean
+    
     mockSocket.trigger("close");
     expect(onClose).toHaveBeenNthCalledWith(1, true);
     expect(onClose).toHaveBeenNthCalledWith(2, false);
   });
 });
 
-// ---------------------------------------------------------------------------
-// sendTranscriptChunk / sendTranscriptTag — readyState guard
-// ---------------------------------------------------------------------------
+
+
+
 
 describe("sendTranscriptChunk", () => {
   it("sends the message when socket is OPEN", () => {

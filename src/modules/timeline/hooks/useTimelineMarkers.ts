@@ -17,8 +17,8 @@ const SIGNAL_LABELS: Record<TranscriptSignalCue["kind"], string> = {
   keyword: "Keyword",
 };
 
-// Named constants replace magic numbers — changing display density means
-// updating a single location, not hunting for raw integers in the hook.
+
+
 const TIMELINE_LIMITS = {
   transcripts: 16,
   tags: 12,

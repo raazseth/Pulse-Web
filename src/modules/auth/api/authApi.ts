@@ -1,7 +1,7 @@
 import { AuthUser, TokenPair } from "@/modules/auth/types";
 import { resolveHudApiBaseUrl } from "@/shared/utils/hudApiBaseUrl";
 
-/** Resolve at call time so Electron `window.api.serverPort` exists (not at module load). */
+                                                                                            
 function apiBase(): string {
   return resolveHudApiBaseUrl();
 }
@@ -20,15 +20,12 @@ async function post<T>(path: string, body: Record<string, string> = {}): Promise
   const res = await fetch(`${apiBase()}/auth${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    // credentials: "include" sends httpOnly cookies so the server can read
-    // the refresh token without it ever being accessible to JavaScript.
     credentials: "include",
     body: JSON.stringify(body),
   });
 
   const contentType = res.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) {
-    // Server returned HTML (e.g. nginx error page) — surface a clear message.
     throw new Error(`Server error ${res.status}: unexpected response format`);
   }
 
@@ -61,7 +58,6 @@ export async function apiLogin(email: string, password: string): Promise<AuthRes
   return post<AuthResult>("/login", { email, password });
 }
 
-// No arguments: the refresh token is sent automatically as an httpOnly cookie.
 export async function apiRefresh(): Promise<RefreshResult> {
   return post<RefreshResult>("/refresh");
 }

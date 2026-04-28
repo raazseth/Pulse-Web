@@ -47,11 +47,6 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-// Attach terminal-event handlers that always close the db and settle the
-// promise. Using transaction-level handlers (oncomplete/onerror/onabort)
-// guarantees db.close() is called on every code path including request errors
-// and transaction aborts, preventing IDBDatabase handle leaks.
-
 export async function saveSession(session: IdbSession): Promise<void> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
@@ -72,8 +67,6 @@ export async function loadSession(sessionId: string): Promise<IdbSession | null>
     const tx = db.transaction(STORE_NAME, "readonly");
     const req = tx.objectStore(STORE_NAME).get(sessionId);
 
-    // Resolve with the result as soon as the request succeeds; the transaction
-    // oncomplete/onerror handlers then close the db regardless of outcome.
     req.onsuccess = () => resolve((req.result as IdbSession) ?? null);
     tx.oncomplete = () => db.close();
     tx.onerror = () => { db.close(); reject(tx.error); };
