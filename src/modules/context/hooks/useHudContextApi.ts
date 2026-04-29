@@ -20,6 +20,7 @@ export function useHudContextApi({
 
   const patchContext = useCallback(
     async (context: Record<string, string>): Promise<void> => {
+      if (!sessionId) return;
       const res = await fetchWithAuth(
         getHudContextUrl(sessionId),
         {

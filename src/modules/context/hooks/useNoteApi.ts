@@ -18,6 +18,7 @@ export function useNoteApi({ sessionId, accessToken, refreshAccessToken }: UseNo
 
   const createNote = useCallback(
     async (body: string, transcriptId?: string): Promise<{ id: string; body: string }> => {
+      if (!sessionId) throw new Error("Cannot create note without a session");
       const res = await fetchWithAuth(
         getHudNotesUrl(sessionId),
         {
@@ -37,6 +38,7 @@ export function useNoteApi({ sessionId, accessToken, refreshAccessToken }: UseNo
 
   const updateNote = useCallback(
     async (noteId: string, body: string): Promise<void> => {
+      if (!sessionId) return;
       if (!isServerNote(noteId)) return;
       const res = await fetchWithAuth(
         getHudNoteUrl(sessionId, noteId),
@@ -55,6 +57,7 @@ export function useNoteApi({ sessionId, accessToken, refreshAccessToken }: UseNo
 
   const deleteNote = useCallback(
     async (noteId: string): Promise<void> => {
+      if (!sessionId) return;
       if (!isServerNote(noteId)) return;
       const res = await fetchWithAuth(
         getHudNoteUrl(sessionId, noteId),
@@ -70,6 +73,7 @@ export function useNoteApi({ sessionId, accessToken, refreshAccessToken }: UseNo
   const listNotes = useCallback(
     async (overrideSessionId?: string): Promise<Array<{ id: string; label?: string; body: string; linkedTagIds?: string[] }>> => {
       const sid = overrideSessionId ?? sessionId;
+      if (!sid) return [];
       const res = await fetchWithAuth(getHudNotesUrl(sid), {}, getToken, refreshAccessToken);
       if (!res.ok) throw new Error(`List notes failed (${res.status})`);
       const json = await res.json() as { data?: Array<{ id: string; label?: string; body: string; linkedTagIds?: string[] }> };

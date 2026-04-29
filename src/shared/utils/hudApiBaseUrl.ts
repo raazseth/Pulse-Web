@@ -50,10 +50,13 @@ function isFileDocument(): boolean {
 
 export function resolveHudApiBaseUrl(): string {
   const fromEnv = import.meta.env.VITE_HUD_API_URL;
+  const embeddedPort = getElectronEmbeddedServerPort();
+
+  if (embeddedPort) {
+    return embeddedLocalApiBase(embeddedPort);
+  }
 
   if (isFileDocument()) {
-    const p = getElectronEmbeddedServerPort();
-    if (p) return `http://127.0.0.1:${p}/api/v1`;
     if (typeof fromEnv === "string" && fromEnv.trim().startsWith("http")) {
       return trimTrailingSlash(fromEnv.trim());
     }
@@ -66,8 +69,6 @@ export function resolveHudApiBaseUrl(): string {
 
   const mode = inferMode();
   if (mode === "local") {
-    const p = getElectronEmbeddedServerPort();
-    if (p) return `http://127.0.0.1:${p}/api/v1`;
     return "http://localhost:3000/api/v1";
   }
 

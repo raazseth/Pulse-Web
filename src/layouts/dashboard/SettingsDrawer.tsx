@@ -113,11 +113,19 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
     if (!api?.listDisplaySources) return;
     setDisplaySourcesLoading(true);
     setDisplaySourcesError("");
-    api
-      .listDisplaySources()
-      .then((rows) => {
+    const prefPromise =
+      typeof api.getDisplayCapturePreference === "function"
+        ? api.getDisplayCapturePreference()
+        : Promise.resolve(null);
+    void Promise.all([api.listDisplaySources(), prefPromise])
+      .then(([rows, preferredRaw]) => {
         setDisplaySources(rows);
-        setDisplaySourceId((prev) => prev || rows[0]?.id || "");
+        const preferredId = typeof preferredRaw === "string" ? preferredRaw.trim() : "";
+        const matchPreferred =
+          preferredId && rows.some((r) => r.id === preferredId) ? preferredId : "";
+        const fallback =
+          rows.find((s) => s.id.startsWith("screen:"))?.id ?? rows[0]?.id ?? "";
+        setDisplaySourceId(matchPreferred || fallback);
       })
       .catch(() => setDisplaySourcesError("Could not list capture sources."))
       .finally(() => setDisplaySourcesLoading(false));
@@ -664,72 +672,6 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
 
             <Divider />
 
-            {typeof window !== "undefined" && window.api?.listDisplaySources ? (
-              <Box>
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 0.75,
-                    mb: 1.5,
-                  }}
-                >
-                  <DesktopWindowsRoundedIcon
-                    sx={{ fontSize: "0.875rem", color: "text.disabled" }}
-                  />
-                  <Typography
-                    sx={{
-                      fontSize: "0.625rem",
-                      fontWeight: 700,
-                      letterSpacing: "0.08em",
-                      textTransform: "uppercase",
-                      color: "text.disabled",
-                    }}
-                  >
-                    System audio capture
-                  </Typography>
-                </Box>
-                <Stack spacing={1.25}>
-                  <Typography sx={{ fontSize: "0.75rem", color: "text.secondary", lineHeight: 1.45 }}>
-                    Choose which screen or window Electron prefers when you start system-audio capture. You still
-                    confirm in the OS picker; this sets the default video source (with loopback audio).
-                  </Typography>
-                  <Typography sx={{ fontSize: "0.7rem", color: "text.disabled", lineHeight: 1.45 }}>
-                    Windows 11: Settings → System → Sound → allow app access. macOS Sequoia: System Settings → Privacy
-                    and Security → Screen Recording and Microphone for Pulse HUD.
-                  </Typography>
-                  {displaySourcesError ? (
-                    <Alert severity="warning">{displaySourcesError}</Alert>
-                  ) : null}
-                  <FormControl fullWidth size="small" disabled={displaySourcesLoading}>
-                    <InputLabel id="pulse-display-source-label">Preferred source</InputLabel>
-                    <Select
-                      labelId="pulse-display-source-label"
-                      label="Preferred source"
-                      value={displaySourceId}
-                      onChange={(e) => setDisplaySourceId(String(e.target.value))}
-                    >
-                      {displaySources.map((s) => (
-                        <MenuItem key={s.id} value={s.id}>
-                          {s.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    disabled={!displaySourceId || displaySourcesLoading}
-                    onClick={() => window.api?.setDisplayCaptureSource?.(displaySourceId || null)}
-                  >
-                    Save preference
-                  </Button>
-                </Stack>
-              </Box>
-            ) : null}
-
-            {typeof window !== "undefined" && window.api?.listDisplaySources ? <Divider /> : null}
-
             <Box>
               <Box
                 sx={{
@@ -813,6 +755,83 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                 </Button>
               </Stack>
             </Box>
+
+            {typeof window !== "undefined" && window.api?.listDisplaySources ? <Divider /> : null}
+
+            {typeof window !== "undefined" && window.api?.listDisplaySources ? (
+              <Box>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.75,
+                    mb: 1.5,
+                  }}
+                >
+                  <DesktopWindowsRoundedIcon
+                    sx={{ fontSize: "0.875rem", color: "text.disabled" }}
+                  />
+                  <Typography
+                    sx={{
+                      fontSize: "0.625rem",
+                      fontWeight: 700,
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
+                      color: "text.disabled",
+                    }}
+                  >
+                    System audio capture
+                  </Typography>
+                </Box>
+                <Stack spacing={1.25}>
+                  <Typography sx={{ fontSize: "0.75rem", color: "text.secondary", lineHeight: 1.45 }}>
+                    Choose which screen or window Electron prefers when you start system-audio capture. You still
+                    confirm in the OS picker; this sets the default video source (with loopback audio).
+                  </Typography>
+                  {displaySourcesError ? (
+                    <Alert severity="warning">{displaySourcesError}</Alert>
+                  ) : null}
+                  <Box
+                    sx={{
+                      borderRadius: "10px",
+                      border: "1px solid",
+                      borderColor: "divider",
+                      p: 1.5,
+                    }}
+                  >
+                    <Stack spacing={1.25}>
+                      <FormControl fullWidth size="small" disabled={displaySourcesLoading}>
+                        <InputLabel id="pulse-display-source-label">Preferred source</InputLabel>
+                        <Select
+                          labelId="pulse-display-source-label"
+                          label="Preferred source"
+                          value={displaySourceId}
+                          onChange={(e) => setDisplaySourceId(String(e.target.value))}
+                        >
+                          {displaySources.map((s) => (
+                            <MenuItem key={s.id} value={s.id}>
+                              {s.name}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        disabled={!displaySourceId || displaySourcesLoading}
+                        onClick={() => window.api?.setDisplayCaptureSource?.(displaySourceId || null)}
+                      >
+                        Save preference
+                      </Button>
+                    </Stack>
+                  </Box>
+                  <Typography sx={{ fontSize: "0.7rem", color: "text.disabled", lineHeight: 1.45 }}>
+                    Windows 11: Settings → System → Sound → allow app access. macOS Sequoia: System Settings → Privacy
+                    and Security → Screen Recording and Microphone for Pulse HUD.
+                  </Typography>
+                </Stack>
+              </Box>
+            ) : null}
           </Stack>
         </Box>
 

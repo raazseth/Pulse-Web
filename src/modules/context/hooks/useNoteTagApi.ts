@@ -14,6 +14,7 @@ export function useNoteTagApi({ sessionId, accessToken, refreshAccessToken }: Us
 
   const addTagToNote = useCallback(
     async (noteId: string, tagId: string): Promise<void> => {
+      if (!sessionId) return;
       if (!isServerNote(noteId) || !isServerNote(tagId)) return;
       const res = await fetchWithAuth(
         getHudNoteTagsUrl(sessionId, noteId),
@@ -32,6 +33,7 @@ export function useNoteTagApi({ sessionId, accessToken, refreshAccessToken }: Us
 
   const removeTagFromNote = useCallback(
     async (noteId: string, tagId: string): Promise<void> => {
+      if (!sessionId) return;
       if (!isServerNote(noteId) || !isServerNote(tagId)) return;
       const res = await fetchWithAuth(
         getHudNoteTagUrl(sessionId, noteId, tagId),
