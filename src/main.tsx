@@ -1,14 +1,20 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 
-if (import.meta.env.DEV && "serviceWorker" in navigator) {
-  navigator.serviceWorker.getRegistrations().then((regs) => {
-    regs.forEach((r) => r.unregister());
-  });
-} else if (import.meta.env.PROD && "serviceWorker" in navigator) {
-  import("virtual:pwa-register").then(({ registerSW }) => {
-    registerSW({ immediate: true });
-  });
+function isElectronShell(): boolean {
+  return typeof window !== "undefined" && "api" in window;
+}
+
+if ("serviceWorker" in navigator) {
+  if (import.meta.env.DEV || isElectronShell()) {
+    navigator.serviceWorker.getRegistrations().then((regs) => {
+      regs.forEach((r) => r.unregister());
+    });
+  } else if (import.meta.env.PROD) {
+    import("virtual:pwa-register").then(({ registerSW }) => {
+      registerSW({ immediate: true });
+    });
+  }
 }
 import { CssBaseline, GlobalStyles } from "@mui/material";
 import { RouterProvider } from "react-router-dom";

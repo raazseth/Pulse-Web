@@ -9,7 +9,9 @@ import type {
 
 const CHANNEL = "pulse-transcript-bridge-v1";
 
-type ToMain = { type: "send-chunk"; payload: TranscriptChunkInput };
+type ToMain =
+  | { type: "send-chunk"; payload: TranscriptChunkInput }
+  | { type: "request-state" };
 type ToPip = {
   type: "state";
   items: TranscriptItem[];
@@ -30,6 +32,11 @@ export function useTranscriptMainBridge(
   const sendRef = useRef(sendChunk);
   useEffect(() => { sendRef.current = sendChunk; });
 
+  const snapshotRef = useRef({ items, prompts, signals, status });
+  useEffect(() => {
+    snapshotRef.current = { items, prompts, signals, status };
+  }, [items, prompts, signals, status]);
+
   const channelRef = useRef<BroadcastChannel | null>(null);
 
   useEffect(() => {
@@ -37,7 +44,22 @@ export function useTranscriptMainBridge(
     const ch = new BroadcastChannel(CHANNEL);
     channelRef.current = ch;
     ch.onmessage = (e: MessageEvent<ToMain>) => {
-      if (e.data?.type === "send-chunk") sendRef.current(e.data.payload);
+      const msg = e.data;
+      if (!msg) return;
+      if (msg.type === "send-chunk") {
+        sendRef.current(msg.payload);
+        return;
+      }
+      if (msg.type === "request-state") {
+        const s = snapshotRef.current;
+        ch.postMessage({
+          type: "state",
+          items: s.items,
+          prompts: s.prompts,
+          signals: s.signals,
+          status: s.status,
+        } satisfies ToPip);
+      }
     };
     return () => { ch.close(); channelRef.current = null; };
   }, [enabled]);
@@ -69,6 +91,7 @@ export function useTranscriptPipBridge(enabled: boolean) {
         setStatus(e.data.status ?? "connecting");
       });
     };
+    ch.postMessage({ type: "request-state" } satisfies ToMain);
     return () => { ch.close(); channelRef.current = null; };
   }, [enabled]);
 
