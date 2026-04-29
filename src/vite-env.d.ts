@@ -5,6 +5,8 @@ interface ElectronApi {
   serverPort: number;
   livePulseWebOrigins: readonly string[];
   exportSession(session: unknown, format: string): Promise<unknown>;
+  listDisplaySources(): Promise<Array<{ id: string; name: string }>>;
+  setDisplayCaptureSource(sourceId: string | null): Promise<{ success: true }>;
   startInterview(): Promise<void>;
   stopInterview(): Promise<void>;
 }

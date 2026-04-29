@@ -10,6 +10,7 @@ export interface SessionSummary {
   title: string;
   status: SessionStatus;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface CreateSessionPayload {
@@ -35,8 +36,8 @@ export function useSessionApi({ accessToken, refreshAccessToken }: UseSessionApi
     try {
       const res = await fetchWithAuth(getHudSessionsUrl(), {}, getToken, refreshAccessToken);
       if (!res.ok) return [];
-      const json = await res.json() as { data?: SessionSummary[] };
-      const data = json.data ?? [];
+      const json = await res.json() as { data?: SessionSummary[] | { sessions?: SessionSummary[] } };
+      const data = Array.isArray(json.data) ? json.data : json.data?.sessions ?? [];
       setSessions(data);
       return data;
     } finally {

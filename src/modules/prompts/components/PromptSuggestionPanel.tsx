@@ -1,6 +1,7 @@
 import { memo, useState } from "react";
 import {
   alpha,
+  Box,
   Chip,
   Divider,
   IconButton,
@@ -63,9 +64,9 @@ export const PromptSuggestionPanel = memo(function PromptSuggestionPanel({
     <GlassPanel>
       <Stack sx={{ gap: 2 }}>
         <SectionHeader
-          eyebrow="AI Prompts"
-          title="Live suggestions"
-          subtitle="Rules = client or HUD heuristics. AI appears only when the server marks a prompt as model-backed."
+          eyebrow="AI coach"
+          title="Interviewer follow-ups"
+          subtitle="Server AI tags INTERVIEWER (system/call audio) vs INTERVIEWEE (your mic) and suggests follow-ups when you speak. Offline patterns fill in only if the model is unavailable."
         />
         <Divider />
         <Stack sx={{ gap: 1.5 }}>
@@ -83,8 +84,24 @@ export const PromptSuggestionPanel = memo(function PromptSuggestionPanel({
               const origin = prompt.suggestionOrigin ?? "local";
               const isModel = origin === "model";
 
+              const AI_VIOLET = "#7C3AED";
+
               return (
-                <Stack key={prompt.id} sx={{ gap: 0.75 }}>
+                <Box
+                  key={prompt.id}
+                  sx={{
+                    p: 1.75,
+                    borderRadius: 2,
+                    border: isModel
+                      ? `1px solid ${alpha(AI_VIOLET, 0.35)}`
+                      : `1px solid ${alpha(theme.palette.grey[500], 0.22)}`,
+                    background: isModel
+                      ? `linear-gradient(135deg, ${alpha(AI_VIOLET, 0.06)} 0%, ${alpha(theme.palette.background.paper, 0.95)} 55%)`
+                      : alpha(theme.palette.grey[500], 0.04),
+                    boxShadow: isModel ? `0 4px 20px ${alpha(AI_VIOLET, 0.12)}` : "none",
+                  }}
+                >
+                <Stack sx={{ gap: 0.75 }}>
                   <Stack
                     direction="row"
                     sx={{
@@ -94,7 +111,9 @@ export const PromptSuggestionPanel = memo(function PromptSuggestionPanel({
                     }}
                   >
                     <Stack sx={{ flex: 1, minWidth: 0, gap: 0.75 }}>
-                      <Typography variant="subtitle2">{prompt.title}</Typography>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 700, letterSpacing: "-0.01em" }}>
+                        {prompt.title}
+                      </Typography>
                       <Stack
                         direction="row"
                         sx={{
@@ -107,8 +126,8 @@ export const PromptSuggestionPanel = memo(function PromptSuggestionPanel({
                         <Tooltip
                           title={
                             isModel
-                              ? "Suggested by the AI / server pipeline"
-                              : "Local pattern match or fallback text (no model call)"
+                              ? "Generated from live transcript: interviewee lines drive these questions for the interviewer."
+                              : "Client-side pattern when server AI suggestions are not available."
                           }
                         >
                           <Chip
@@ -121,17 +140,18 @@ export const PromptSuggestionPanel = memo(function PromptSuggestionPanel({
                                 <RuleRoundedIcon sx={{ "&&": { fontSize: 15 } }} />
                               )
                             }
-                            label={isModel ? "AI" : "Rules"}
+                            label={isModel ? "AI · model" : "Offline"}
                             sx={{
                               ...metaChipSx,
                               height: 22,
-                              color: isModel ? "secondary.dark" : "text.secondary",
+                              color: isModel ? AI_VIOLET : "text.secondary",
                               borderColor: isModel
-                                ? alpha(theme.palette.secondary.main, 0.4)
+                                ? alpha(AI_VIOLET, 0.45)
                                 : alpha(theme.palette.grey[600], 0.35),
                               bgcolor: isModel
-                                ? alpha(theme.palette.secondary.main, 0.08)
+                                ? alpha(AI_VIOLET, 0.08)
                                 : alpha(theme.palette.grey[500], 0.08),
+                              fontWeight: 700,
                               "& .MuiChip-icon": { color: "inherit" },
                             }}
                           />
@@ -197,11 +217,12 @@ export const PromptSuggestionPanel = memo(function PromptSuggestionPanel({
                     </Stack>
                   </Stack>
                 </Stack>
+                </Box>
               );
             })
           ) : (
             <Typography variant="body2" color="text.secondary">
-              Suggestions will appear as important patterns show up in the transcript.
+              AI suggestions refresh after you speak on the mic; system audio carries the interviewer. Set session context (title, facilitator, audience, role) for best results.
             </Typography>
           )}
         </Stack>

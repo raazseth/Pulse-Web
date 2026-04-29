@@ -60,13 +60,13 @@ describe("useTimelineMarkers", () => {
     expect(result.current[0].label).toBe("Clarify");
   });
 
-  it("maps signals to kind='signal' markers with label prefix", () => {
+  it("maps signals to kind='signal' markers using server signal label", () => {
     const signals = [makeSignal("sig-1", "2024-01-01T00:03:00.000Z")];
     const { result } = renderHook(() =>
       useTimelineMarkers({ ...EMPTY, signals }),
     );
     expect(result.current[0].kind).toBe("signal");
-    expect(result.current[0].label).toBe("Keyword: blocker detected");
+    expect(result.current[0].label).toBe("blocker detected");
   });
 
   it("sorts all markers by timestamp ascending", () => {
@@ -107,15 +107,15 @@ describe("useTimelineMarkers", () => {
     expect(promptMarkers).toHaveLength(8);
   });
 
-  it("applies correct SIGNAL_LABELS: silence", () => {
+  it("uses signal label for silence cues", () => {
     const signals = [{ ...makeSignal("s1", "2024-01-01T00:00:00.000Z"), kind: "silence" as const, label: "pause detected" }];
     const { result } = renderHook(() => useTimelineMarkers({ ...EMPTY, signals }));
-    expect(result.current[0].label).toBe("Silence: pause detected");
+    expect(result.current[0].label).toBe("pause detected");
   });
 
-  it("applies correct SIGNAL_LABELS: sentiment-shift", () => {
+  it("uses signal label for sentiment-shift cues", () => {
     const signals = [{ ...makeSignal("s2", "2024-01-01T00:00:00.000Z"), kind: "sentiment-shift" as const, label: "emotion spike" }];
     const { result } = renderHook(() => useTimelineMarkers({ ...EMPTY, signals }));
-    expect(result.current[0].label).toBe("Sentiment: emotion spike");
+    expect(result.current[0].label).toBe("emotion spike");
   });
 });

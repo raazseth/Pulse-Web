@@ -250,12 +250,11 @@ export function AuthPage() {
             AI-powered prompts and live transcription so you never miss a moment during qualitative interviews.
           </Typography>
 
-          {                  }
           <Stack spacing={1.5} sx={{ pt: 1 }}>
             {[
               "Live transcript capture",
               "Context-aware AI prompts",
-              "JSON & CSV session export",
+              "Server export (JSON/CSV with transcript, prompts, tags) from Settings",
             ].map((feat) => (
               <Box key={feat} sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
                 <Box
@@ -276,7 +275,6 @@ export function AuthPage() {
         </Stack>
       </Box>
 
-      {                                                           }
       <Box
         sx={{
           flex: 1,

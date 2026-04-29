@@ -29,11 +29,15 @@ describe("transcriptLineHasCatalogTag", () => {
   });
 
   it("returns false when same catalog tag is on another line", () => {
-    expect(transcriptLineHasCatalogTag(tags, "line-a", "insight")).toBe(true);
     expect(transcriptLineHasCatalogTag(tags, "line-c", "insight")).toBe(false);
   });
 
   it("returns false when line has other tags but not this catalog id", () => {
     expect(transcriptLineHasCatalogTag(tags, "line-a", "quote")).toBe(false);
+  });
+
+  it("does not treat a different catalog tag as present when only other tags exist on the line", () => {
+    expect(transcriptLineHasCatalogTag(tags, "line-a", "risk")).toBe(true);
+    expect(transcriptLineHasCatalogTag(tags, "line-a", "delight")).toBe(false);
   });
 });

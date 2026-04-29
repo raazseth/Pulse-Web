@@ -1,20 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Box,
-  Button,
-  Chip,
-  CircularProgress,
-  Grid,
-  Stack,
-  Typography,
-} from "@mui/material";
-import PlayArrowRoundedIcon from "@mui/icons-material/PlayArrowRounded";
+import { Box, Chip, Grid, Stack, Typography } from "@mui/material";
 import { ContextPanel } from "@/modules/context/components/ContextPanel";
-import { useSessionStore } from "@/modules/context/hooks/useSessionStore";
+import {
+  lastSessionStorageKey,
+  useSessionStore,
+} from "@/modules/context/hooks/useSessionStore";
 import { useHudContextApi } from "@/modules/context/hooks/useHudContextApi";
 import { useNoteApi } from "@/modules/context/hooks/useNoteApi";
 import { useNoteTagApi } from "@/modules/context/hooks/useNoteTagApi";
-import { useSessionList, type SessionSummary } from "@/modules/context/hooks/useSessionList";
+import {
+  useSessionList,
+  type SessionSummary,
+} from "@/modules/context/hooks/useSessionList";
 import { PromptSuggestionPanel } from "@/modules/prompts/components/PromptSuggestionPanel";
 import { usePromptSuggestions } from "@/modules/prompts/hooks/usePromptSuggestions";
 import { TagPanel } from "@/modules/tagging/components/TagPanel";
@@ -26,17 +23,27 @@ import { TranscriptPanel } from "@/modules/transcript/components/TranscriptPanel
 import { FloatingPulseHudPanel } from "@/shared/components/FloatingPulseHudPanel";
 import { useTranscriptHud } from "@/modules/transcript/context/TranscriptHudContext";
 import { useTranscriptStream } from "@/modules/transcript/hooks/useTranscriptStream";
-import { useTranscriptMainBridge, useTranscriptPipBridge } from "@/modules/transcript/hooks/useTranscriptBridge";
+import {
+  useTranscriptMainBridge,
+  useTranscriptPipBridge,
+} from "@/modules/transcript/hooks/useTranscriptBridge";
 import { useMicCapture } from "@/modules/transcript/hooks/useMicCapture";
 import { useBrowserFirstVoice } from "@/modules/transcript/hooks/useBrowserFirstVoice";
 import { useSystemAudioCapture } from "@/modules/transcript/hooks/useSystemAudioCapture";
-import { getHudPromptUrl, getHudSessionStartUrl, getHudSessionStopUrl } from "@/shared/utils/hudApi";
+import {
+  getHudExportUrl,
+  getHudPromptUrl,
+  getHudSessionStartUrl,
+  getHudSessionStopUrl,
+} from "@/shared/utils/hudApi";
 import { getRuntimeApiConfig } from "@/shared/utils/hudApiBaseUrl";
 import { fetchWithAuth } from "@/shared/utils/fetchWithAuth";
+import { useToast } from "@/shared/components/Toast";
 import { useAuth } from "@/modules/auth/hooks/useAuthStore";
-import { defaultTagOptions } from "@/modules/tagging/services/taggingStorage";
+import { mapServerHudTagToTranscriptTag } from "@/modules/context/utils/mapServerHudTag";
 import { transcriptLineHasCatalogTag } from "@/modules/tagging/utils/transcriptTagDedupe";
 import { FloatingPulseHud } from "@/shared/components/FloatingPulseHud";
+import { useHudAcceptedPromptState } from "@/shared/hooks/useHudAcceptedPromptState";
 import { singleFlightByKey } from "@/shared/utils/singleFlightByKey";
 import { SessionNote } from "@/modules/context/types";
 import { TranscriptSocketTag } from "@/modules/transcript/types";
@@ -46,31 +53,43 @@ function pickPreferredServerSession(list: SessionSummary[]): SessionSummary {
   return list.find((s) => s.status === "active") ?? list[0];
 }
 
-function mapRemoteTag(tag: {
-  id: string;
-  transcriptId?: string;
-  label: string;
-  createdAt: string;
-  metadata?: Record<string, string>;
-}) {
-  const catalogId =
-    tag.metadata?.tagKey ??
-    defaultTagOptions.find((o) => o.label === tag.label)?.id ??
-    tag.label;
+const TAG_CAPTURE_TEXT_MAX = 450;
+
+function buildTagCaptureMetadata(
+  line: { timestamp: string; text: string },
+  catalogTagId: string,
+): Record<string, string> {
+  const raw = String(line.text ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const snippet =
+    raw.length <= TAG_CAPTURE_TEXT_MAX
+      ? raw
+      : `${raw.slice(0, TAG_CAPTURE_TEXT_MAX - 1)}…`;
   return {
-    id: tag.id,
-    tagId: catalogId,
-    transcriptId: tag.transcriptId,
-    timestamp: tag.createdAt,
+    tagKey: catalogTagId,
+    transcriptAt: line.timestamp,
+    ...(snippet ? { transcriptText: snippet } : {}),
   };
 }
 
 export function App() {
-  const isPipMode = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("pip");
-  const { accessToken, refreshAccessToken } = useAuth();
-  const { setHudSocketStatus } = useTranscriptHud();
-  const speakerIdRef = useRef("interviewer");
-  const sendChunkRef = useRef<(payload: { text: string; speakerId?: string; timestamp?: string; context?: Record<string, string> }) => boolean>(() => false);
+  const isPipMode =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).has("pip");
+  const { accessToken, refreshAccessToken, user } = useAuth();
+  const { setHudSocketStatus, setHudSocketError } = useTranscriptHud();
+  const { toast } = useToast();
+  const speakerIdRef = useRef("interviewee");
+  const tagAttachInflightRef = useRef(new Set<string>());
+  const sendChunkRef = useRef<
+    (payload: {
+      text: string;
+      speakerId?: string;
+      timestamp?: string;
+      context?: Record<string, string>;
+    }) => boolean
+  >(() => false);
   const [voiceAutoSend, setVoiceAutoSend] = useState(true);
   const [composerLine, setComposerLine] = useState("");
   const session = useSessionStore();
@@ -84,17 +103,27 @@ export function App() {
     sessionId: session.sessionId,
     accessToken,
     refreshAccessToken,
-    disabled: isPipMode,
-    onSessionState: useCallback((state: TranscriptSessionState) => {
-      session.setTags(state.tags.map(mapRemoteTag));
-    }, [session.setTags]),
-    onTagCreated: useCallback((tag: TranscriptSocketTag) => {
-      session.upsertTag(mapRemoteTag(tag));
-    }, [session.upsertTag]),
+    disabled: isPipMode || !accessToken || !session.sessionId,
+    onSessionState: useCallback(
+      (state: TranscriptSessionState) => {
+        session.setTags(state.tags.map(mapServerHudTagToTranscriptTag));
+      },
+      [session.setTags],
+    ),
+    onTagCreated: useCallback(
+      (tag: TranscriptSocketTag) => {
+        const mapped = mapServerHudTagToTranscriptTag(tag);
+        if (mapped.transcriptId) {
+          tagAttachInflightRef.current.delete(
+            `${mapped.transcriptId}\0${mapped.tagId}`,
+          );
+        }
+        session.upsertTag(mapped);
+      },
+      [session.upsertTag],
+    ),
   });
 
-  // Bridge: main window broadcasts transcript state to pip; pip relays sends back.
-  // Both hooks are always called (React rules); `enabled` flag controls active side.
   useTranscriptMainBridge(
     !isPipMode,
     transcript.items,
@@ -105,11 +134,11 @@ export function App() {
   );
   const pipBridge = useTranscriptPipBridge(isPipMode);
 
-  // Route sendChunk through the active source before any callbacks are defined.
   sendChunkRef.current = isPipMode ? pipBridge.sendChunk : transcript.sendChunk;
 
   const effectiveItems = isPipMode ? pipBridge.items : transcript.items;
   const effectivePrompts = isPipMode ? pipBridge.prompts : transcript.prompts;
+  const effectiveSignals = isPipMode ? pipBridge.signals : transcript.signals;
 
   const promptSuggestions = usePromptSuggestions(
     effectiveItems,
@@ -119,8 +148,8 @@ export function App() {
   const timelineMarkers = useTimelineMarkers({
     prompts: promptSuggestions.prompts,
     tags: session.tags,
-    transcripts: transcript.items,
-    signals: transcript.signals,
+    transcripts: effectiveItems,
+    signals: effectiveSignals,
   });
 
   const selectedTag = useMemo(
@@ -130,8 +159,9 @@ export function App() {
 
   const selectedTranscript = useMemo(
     () =>
-      transcript.items.find((item) => item.id === session.selectedTranscriptId) ??
-      transcript.items.at(-1),
+      transcript.items.find(
+        (item) => item.id === session.selectedTranscriptId,
+      ) ?? transcript.items.at(-1),
     [session.selectedTranscriptId, transcript.items],
   );
 
@@ -145,34 +175,45 @@ export function App() {
     [session.availableTags],
   );
 
+  const tryAttachCatalogTagToLine = useCallback(
+    (
+      catalogTagId: string,
+      line: { id: string; text: string; timestamp: string } | undefined,
+    ) => {
+      if (!line) return false;
+      const tag = session.availableTags.find(
+        (item) => item.id === catalogTagId,
+      );
+      if (!tag) return false;
+      const key = `${line.id}\0${tag.id}`;
+      if (tagAttachInflightRef.current.has(key)) return false;
+      if (transcriptLineHasCatalogTag(session.tags, line.id, tag.id))
+        return false;
+      tagAttachInflightRef.current.add(key);
+      const ok = transcript.createTag({
+        label: tag.label,
+        transcriptId: line.id,
+        metadata: buildTagCaptureMetadata(line, tag.id),
+      });
+      if (!ok) tagAttachInflightRef.current.delete(key);
+      return ok;
+    },
+    [session.availableTags, session.tags, transcript.createTag],
+  );
+
   const sendFocusedTag = useCallback(() => {
     if (!selectedTranscript || !selectedTag) return;
-    if (
-      transcriptLineHasCatalogTag(session.tags, selectedTranscript.id, selectedTag.id)
-    ) {
-      return;
-    }
-    transcript.createTag({
-      label: selectedTag.label,
-      transcriptId: selectedTranscript.id,
-      metadata: { tagKey: selectedTag.id },
-    });
-  }, [selectedTranscript, selectedTag, session.tags, transcript.createTag]);
+    void tryAttachCatalogTagToLine(selectedTag.id, selectedTranscript);
+  }, [selectedTranscript, selectedTag, tryAttachCatalogTagToLine]);
 
   const handleTagAttach = useCallback(
-    (catalogTagId: string) => {
-      const tag = session.availableTags.find((item) => item.id === catalogTagId);
-      if (!selectedTranscript || !tag) return;
-      if (transcriptLineHasCatalogTag(session.tags, selectedTranscript.id, tag.id)) {
-        return;
-      }
-      transcript.createTag({
-        label: tag.label,
-        transcriptId: selectedTranscript.id,
-        metadata: { tagKey: tag.id },
-      });
+    (catalogTagId: string, transcriptIdOverride?: string) => {
+      const line = transcriptIdOverride
+        ? transcript.items.find((item) => item.id === transcriptIdOverride)
+        : selectedTranscript;
+      void tryAttachCatalogTagToLine(catalogTagId, line);
     },
-    [session.availableTags, session.tags, selectedTranscript, transcript.createTag],
+    [selectedTranscript, transcript.items, tryAttachCatalogTagToLine],
   );
 
   useTaggingShortcuts({
@@ -211,70 +252,98 @@ export function App() {
     [session.metadata, session.notes],
   );
 
-  const applyVoiceToComposerLine = useCallback((chunk: string, replace: boolean) => {
-    const t = chunk.trim();
-    if (!t) return;
-    setComposerLine((prev) => {
-      if (replace) return t;
-      const p = prev.trimEnd();
-      if (!p) return t;
-      return `${p} ${t}`;
-    });
-  }, []);
+  const applyVoiceToComposerLine = useCallback(
+    (chunk: string, replace: boolean) => {
+      const t = chunk.trim();
+      if (!t) return;
+      setComposerLine((prev) => {
+        if (replace) return t;
+        const p = prev.trimEnd();
+        if (!p) return t;
+        return `${p} ${t}`;
+      });
+    },
+    [],
+  );
 
-  const handleMicChunk = useCallback((text: string) => {
-    const speakerId = speakerIdRef.current;
-    console.log("[server-transcript]", { text, speakerId });
-    applyVoiceToComposerLine(text, voiceAutoSend);
-    if (!voiceAutoSend) return;
-    const sent = handleComposerSubmit({ text, speakerId, transcriptSource: "server-transcribe" });
-    if (sent) setComposerLine("");
-  }, [voiceAutoSend, applyVoiceToComposerLine, handleComposerSubmit]);
+  const handleMicChunk = useCallback(
+    (text: string) => {
+      const speakerId = speakerIdRef.current;
+      console.log("[server-transcript]", { text, speakerId });
+      applyVoiceToComposerLine(text, voiceAutoSend);
+      if (!voiceAutoSend) return;
+      const sent = handleComposerSubmit({
+        text,
+        speakerId,
+        transcriptSource: "server-transcribe",
+      });
+      if (sent) setComposerLine("");
+    },
+    [voiceAutoSend, applyVoiceToComposerLine, handleComposerSubmit],
+  );
 
-  const handleBrowserDictatedText = useCallback((text: string) => {
-    const speakerId = speakerIdRef.current;
-    applyVoiceToComposerLine(text, voiceAutoSend);
-    if (!voiceAutoSend) return;
-    const sent = handleComposerSubmit({ text, speakerId, transcriptSource: "browser-speech" });
-    if (sent) setComposerLine("");
-  }, [voiceAutoSend, applyVoiceToComposerLine, handleComposerSubmit]);
+  const handleBrowserDictatedText = useCallback(
+    (text: string) => {
+      const speakerId = speakerIdRef.current;
+      applyVoiceToComposerLine(text, voiceAutoSend);
+      if (!voiceAutoSend) return;
+      const sent = handleComposerSubmit({
+        text,
+        speakerId,
+        transcriptSource: "browser-speech",
+      });
+      if (sent) setComposerLine("");
+    },
+    [voiceAutoSend, applyVoiceToComposerLine, handleComposerSubmit],
+  );
 
   const voiceTranscribeFallbackRef = useRef<(() => void) | null>(null);
 
   const mic = useMicCapture({
     accessToken,
     refreshAccessToken,
+    transcribeSessionId: session.sessionId,
     onChunk: handleMicChunk,
     onVoiceBackendError: () => voiceTranscribeFallbackRef.current?.(),
   });
 
-  const handleSystemAudioChunk = useCallback((text: string) => {
-    const speakerId = speakerIdRef.current;
-    applyVoiceToComposerLine(text, voiceAutoSend);
-    if (!voiceAutoSend) return;
-    const sent = handleComposerSubmit({ text, speakerId, transcriptSource: "server-transcribe" });
-    if (sent) setComposerLine("");
-  }, [voiceAutoSend, applyVoiceToComposerLine, handleComposerSubmit]);
+  const handleSystemAudioChunk = useCallback(
+    (text: string) => {
+      const speakerId = "system";
+      applyVoiceToComposerLine(text, voiceAutoSend);
+      if (!voiceAutoSend) return;
+      const sent = handleComposerSubmit({
+        text,
+        speakerId,
+        transcriptSource: "server-transcribe",
+      });
+      if (sent) setComposerLine("");
+    },
+    [voiceAutoSend, applyVoiceToComposerLine, handleComposerSubmit],
+  );
 
   const systemAudio = useSystemAudioCapture({
     accessToken,
     refreshAccessToken,
+    transcribeSessionId: session.sessionId,
     onChunk: handleSystemAudioChunk,
-    sendAudioChunk: isPipMode ? undefined : (audio, mimeType) =>
-      transcript.sendAudioChunk({
-        audio,
-        mimeType,
-        speakerId: "system",
-        lang: "en",
-        context: {
-          title: session.metadata.title,
-          facilitator: session.metadata.facilitator,
-          audience: session.metadata.audience,
-          role: session.metadata.role,
-          notes: session.notes.map((n) => n.body).join("\n"),
-          transcriptSource: "server-transcribe",
-        },
-      }),
+    sendAudioChunk: isPipMode
+      ? undefined
+      : (audio, mimeType) =>
+          transcript.sendAudioChunk({
+            audio,
+            mimeType,
+            speakerId: "system",
+            lang: "en",
+            context: {
+              title: session.metadata.title,
+              facilitator: session.metadata.facilitator,
+              audience: session.metadata.audience,
+              role: session.metadata.role,
+              notes: session.notes.map((n) => n.body).join("\n"),
+              transcriptSource: "server-transcribe",
+            },
+          }),
   });
 
   const handleSystemAudioStart = useCallback(async () => {
@@ -309,18 +378,40 @@ export function App() {
 
   const noteSyncTimers = useRef<Map<string, number>>(new Map());
 
-  const handleNoteSave = useCallback((note: SessionNote) => {
+  const flushNoteTimer = useCallback((noteId: string) => {
     const timers = noteSyncTimers.current;
-    const existing = timers.get(note.id);
-    if (existing) window.clearTimeout(existing);
-    const id = window.setTimeout(() => {
-      noteApi.updateNote(note.id, note.body).catch(() => { });
-      timers.delete(note.id);
-    }, 1000);
-    timers.set(note.id, id);
-  }, [noteApi]);
+    const existing = timers.get(noteId);
+    if (existing) {
+      window.clearTimeout(existing);
+      timers.delete(noteId);
+    }
+  }, []);
+
+  const handleNoteSave = useCallback(
+    (note: SessionNote) => {
+      if (note.editorLocked) return;
+      const timers = noteSyncTimers.current;
+      const existing = timers.get(note.id);
+      if (existing) window.clearTimeout(existing);
+      const id = window.setTimeout(() => {
+        noteApi.updateNote(note.id, note.body).catch(() => {});
+        timers.delete(note.id);
+      }, 1000);
+      timers.set(note.id, id);
+    },
+    [noteApi],
+  );
+
+  const handleNoteCommit = useCallback(
+    (note: SessionNote) => {
+      flushNoteTimer(note.id);
+      noteApi.updateNote(note.id, note.body).catch(() => {});
+    },
+    [flushNoteTimer, noteApi],
+  );
 
   const handleNoteAdd = useCallback(async () => {
+    if (session.notes.some((n) => n.isDraft)) return;
     try {
       const created = await noteApi.createNote("");
       session.addNote({
@@ -328,43 +419,61 @@ export function App() {
         label: "New note",
         body: created.body,
         linkedTagIds: [],
+        isDraft: true,
       });
-    } catch {
-    }
-  }, [session.addNote, noteApi]);
+    } catch {}
+  }, [session.addNote, session.notes, noteApi]);
 
-  const handleNoteDelete = useCallback((noteId: string) => {
-    session.removeNote(noteId);
-    noteApi.deleteNote(noteId).catch(() => { });
-  }, [session.removeNote, noteApi]);
+  const handleNoteDelete = useCallback(
+    (noteId: string) => {
+      session.removeNote(noteId);
+      noteApi.deleteNote(noteId).catch(() => {});
+    },
+    [session.removeNote, noteApi],
+  );
 
+  const handlePromptDismiss = useCallback(
+    (promptId: string) => {
+      fetchWithAuth(
+        getHudPromptUrl(session.sessionId, promptId),
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dismissed: true }),
+        },
+        () => accessToken,
+        refreshAccessToken,
+      ).catch(() => {});
+    },
+    [session.sessionId, accessToken, refreshAccessToken],
+  );
 
-  const handlePromptDismiss = useCallback((promptId: string) => {
-    fetchWithAuth(
-      getHudPromptUrl(session.sessionId, promptId),
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dismissed: true }),
-      },
-      () => accessToken,
-      refreshAccessToken,
-    ).catch(() => { });
-  }, [session.sessionId, accessToken, refreshAccessToken]);
+  const handlePromptUse = useCallback(
+    (promptId: string) => {
+      fetchWithAuth(
+        getHudPromptUrl(session.sessionId, promptId),
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ used: true }),
+        },
+        () => accessToken,
+        refreshAccessToken,
+      ).catch(() => {});
+    },
+    [session.sessionId, accessToken, refreshAccessToken],
+  );
 
-  const handlePromptUse = useCallback((promptId: string) => {
-    fetchWithAuth(
-      getHudPromptUrl(session.sessionId, promptId),
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ used: true }),
-      },
-      () => accessToken,
-      refreshAccessToken,
-    ).catch(() => { });
-  }, [session.sessionId, accessToken, refreshAccessToken]);
-
+  const {
+    acceptedMessages: pipAcceptedMessages,
+    dismissedPromptIds: pipDismissedPromptIds,
+    handleHudPromptAccept: pipHandleHudPromptAccept,
+    handleHudPromptDismissId: pipHandleHudPromptDismissId,
+  } = useHudAcceptedPromptState(
+    session.sessionId,
+    handlePromptUse,
+    handlePromptDismiss,
+  );
 
   const noteTagApi = useNoteTagApi({
     sessionId: session.sessionId,
@@ -372,15 +481,21 @@ export function App() {
     refreshAccessToken,
   });
 
-  const handleNoteTagAdd = useCallback((noteId: string, tagId: string) => {
-    session.updateNoteTags(noteId, tagId, true);
-    noteTagApi.addTagToNote(noteId, tagId).catch(() => { });
-  }, [session.updateNoteTags, noteTagApi]);
+  const handleNoteTagAdd = useCallback(
+    (noteId: string, tagId: string) => {
+      session.updateNoteTags(noteId, tagId, true);
+      noteTagApi.addTagToNote(noteId, tagId).catch(() => {});
+    },
+    [session.updateNoteTags, noteTagApi],
+  );
 
-  const handleNoteTagRemove = useCallback((noteId: string, tagId: string) => {
-    session.updateNoteTags(noteId, tagId, false);
-    noteTagApi.removeTagFromNote(noteId, tagId).catch(() => { });
-  }, [session.updateNoteTags, noteTagApi]);
+  const handleNoteTagRemove = useCallback(
+    (noteId: string, tagId: string) => {
+      session.updateNoteTags(noteId, tagId, false);
+      noteTagApi.removeTagFromNote(noteId, tagId).catch(() => {});
+    },
+    [session.updateNoteTags, noteTagApi],
+  );
 
   const { patchContext } = useHudContextApi({
     sessionId: session.sessionId,
@@ -399,10 +514,11 @@ export function App() {
         facilitator: session.metadata.facilitator,
         audience: session.metadata.audience,
         role: session.metadata.role,
-      }).catch(() => { });
+      }).catch(() => {});
     }, 700);
     return () => {
-      if (contextSyncTimer.current) window.clearTimeout(contextSyncTimer.current);
+      if (contextSyncTimer.current)
+        window.clearTimeout(contextSyncTimer.current);
     };
   }, [
     accessToken,
@@ -432,65 +548,63 @@ export function App() {
           ),
         );
       })
-      .catch(() => { });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, [accessToken, noteApi, session.sessionId, session.updateNotes]);
 
-
   const sessionList = useSessionList();
-  const listPrevLoadingRef = useRef<boolean | undefined>(undefined);
   const emptyListBootstrapAttemptedRef = useRef(false);
   const sessionBootstrapTokenRef = useRef<string | null>(null);
+  const loadedServerSessionRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!accessToken) {
-      listPrevLoadingRef.current = undefined;
+    if (!accessToken || !user?.id) {
       emptyListBootstrapAttemptedRef.current = false;
       sessionBootstrapTokenRef.current = null;
+      loadedServerSessionRef.current = null;
       return;
     }
 
     if (sessionBootstrapTokenRef.current !== accessToken) {
       sessionBootstrapTokenRef.current = accessToken;
-      listPrevLoadingRef.current = undefined;
       emptyListBootstrapAttemptedRef.current = false;
+      loadedServerSessionRef.current = null;
     }
 
-    const prevLoading = listPrevLoadingRef.current;
-    listPrevLoadingRef.current = sessionList.loading;
-
-    if (prevLoading === undefined) {
-      return;
-    }
-
-    const fetchJustFinished = prevLoading === true && sessionList.loading === false;
-    if (!fetchJustFinished) {
+    if (sessionList.loading || !sessionList.listLoadSucceeded) {
       return;
     }
 
     const list = sessionList.sessions;
-    if (!sessionList.listLoadSucceeded) {
-      return;
-    }
-
     if (list.length === 0) {
       if (emptyListBootstrapAttemptedRef.current) {
         return;
       }
       emptyListBootstrapAttemptedRef.current = true;
       const payload = {
-        title: session.metadata.title,
+        title: "Untitled Session",
         facilitator: session.metadata.facilitator,
         audience: session.metadata.audience,
         role: session.metadata.role,
       };
-      singleFlightByKey(`hud:auto-session:${accessToken}`, () => sessionList.createSession(payload))
-        .then((created) => {
-          if (created?.id) session.setSessionId(created.id);
-          if (created?.title) session.updateMetadata({ title: created.title });
-          session.setSessionStatus("active");
+      singleFlightByKey(`hud:auto-session:${accessToken}`, () =>
+        sessionList.createSession(payload),
+      )
+        .then(async (created) => {
+          if (!created?.id) return;
+          const snapshot = await sessionList.fetchSessionSnapshot(created.id);
+          if (snapshot) {
+            loadedServerSessionRef.current = created.id;
+            session.applyServerHudSnapshot(snapshot);
+          } else {
+            session.setSessionId(created.id);
+            session.updateMetadata({
+              title: created.title || "Untitled Session",
+            });
+            session.setSessionStatus("active");
+          }
         })
         .catch(() => {
           emptyListBootstrapAttemptedRef.current = false;
@@ -499,29 +613,70 @@ export function App() {
     }
 
     emptyListBootstrapAttemptedRef.current = false;
-    const current = list.find((s) => s.id === session.sessionId);
-    if (!current) {
-      const preferred = pickPreferredServerSession(list);
-      session.setSessionId(preferred.id);
-      session.updateMetadata({ title: preferred.title });
-      session.setSessionStatus(preferred.status);
-    } else {
-      session.setSessionStatus(current.status);
-    }
+    const storedSessionId = window.localStorage.getItem(
+      lastSessionStorageKey(user.id),
+    );
+    const preferred =
+      (storedSessionId
+        ? list.find((s) => s.id === storedSessionId)
+        : undefined) ??
+      (sessionList.lastActiveSessionId
+        ? list.find((s) => s.id === sessionList.lastActiveSessionId)
+        : undefined) ??
+      pickPreferredServerSession(list);
+
+    if (!preferred || loadedServerSessionRef.current === preferred.id) return;
+
+    loadedServerSessionRef.current = preferred.id;
+    sessionList
+      .fetchSessionSnapshot(preferred.id)
+      .then((snapshot) => {
+        if (snapshot) {
+          session.applyServerHudSnapshot(snapshot);
+        }
+      })
+      .catch(() => {
+        loadedServerSessionRef.current = null;
+      });
   }, [
     accessToken,
+    user?.id,
     sessionList.loading,
     sessionList.listLoadSucceeded,
     sessionList.sessions,
-    session.sessionId,
+    sessionList.lastActiveSessionId,
+    sessionList.fetchSessionSnapshot,
     session.metadata.title,
     session.metadata.facilitator,
     session.metadata.audience,
     session.metadata.role,
     sessionList.createSession,
+    session.applyServerHudSnapshot,
     session.setSessionId,
     session.updateMetadata,
     session.setSessionStatus,
+  ]);
+
+  useEffect(() => {
+    if (!accessToken || !session.sessionId) return;
+    if (loadedServerSessionRef.current === session.sessionId) return;
+    const sessionId = session.sessionId;
+    loadedServerSessionRef.current = sessionId;
+    sessionList
+      .fetchSessionSnapshot(sessionId)
+      .then((snapshot) => {
+        if (snapshot) session.applyServerHudSnapshot(snapshot);
+      })
+      .catch(() => {
+        if (loadedServerSessionRef.current === sessionId) {
+          loadedServerSessionRef.current = null;
+        }
+      });
+  }, [
+    accessToken,
+    session.sessionId,
+    sessionList.fetchSessionSnapshot,
+    session.applyServerHudSnapshot,
   ]);
 
   useEffect(() => {
@@ -529,12 +684,35 @@ export function App() {
     if (!session.selectedTranscriptId) {
       session.selectTranscript(transcript.items.at(-1)?.id);
     }
-  }, [session.selectTranscript, session.selectedTranscriptId, transcript.items]);
+  }, [
+    session.selectTranscript,
+    session.selectedTranscriptId,
+    transcript.items,
+  ]);
 
   useEffect(() => {
     setHudSocketStatus(transcript.status);
-    return () => setHudSocketStatus("disconnected");
-  }, [transcript.status, setHudSocketStatus]);
+    setHudSocketError(
+      transcript.status === "error" ? transcript.errorMessage : undefined,
+    );
+    return () => {
+      setHudSocketStatus("disconnected");
+      setHudSocketError(undefined);
+    };
+  }, [
+    transcript.status,
+    transcript.errorMessage,
+    setHudSocketStatus,
+    setHudSocketError,
+  ]);
+
+  const lastToastedSocketError = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (transcript.status !== "error" || !transcript.errorMessage) return;
+    if (lastToastedSocketError.current === transcript.errorMessage) return;
+    lastToastedSocketError.current = transcript.errorMessage;
+    toast({ message: transcript.errorMessage, severity: "error" });
+  }, [transcript.status, transcript.errorMessage, toast]);
 
   const isConnected = transcript.status === "connected";
   const sessionDisplayName =
@@ -560,9 +738,13 @@ export function App() {
         transcriptPreview={pipBridge.items.slice(-30)}
         transcriptStatus={pipBridge.status}
         prompts={promptSuggestions.prompts}
-        onPromptUse={handlePromptUse}
-        onPromptDismiss={handlePromptDismiss}
+        acceptedMessages={pipAcceptedMessages}
+        dismissedPromptIds={pipDismissedPromptIds}
+        onHudPromptAccept={pipHandleHudPromptAccept}
+        onHudPromptDismissId={pipHandleHudPromptDismissId}
         quickTags={session.availableTags.slice(0, 8)}
+        tagShortcutPalette={session.availableTags}
+        quickTagAnchorTranscriptId={session.selectedTranscriptId}
         onQuickTag={handleTagAttach}
         voiceActive={voice.isActive}
         onVoiceToggle={voice.toggle}
@@ -571,24 +753,52 @@ export function App() {
         getDefaultSpeakerId={() => speakerIdRef.current}
         composerLine={composerLine}
         onComposerLineChange={setComposerLine}
-        onSpeakerChange={(id) => { speakerIdRef.current = id; }}
+        onSpeakerChange={(id) => {
+          speakerIdRef.current = id;
+        }}
         sessionTitle={session.metadata.title}
         sessionId={session.sessionId}
-        onClose={() => { void window.api?.stopInterview(); window.close(); }}
+        onClose={() => {
+          void window.api?.stopInterview();
+          window.close();
+        }}
+        notes={session.notes}
+        availableTags={session.availableTags}
+        transcriptTags={session.tags}
+        onNotesChange={session.updateNotes}
+        onNoteAdd={handleNoteAdd}
+        onNoteDelete={handleNoteDelete}
+        onNoteSave={handleNoteSave}
+        onNoteCommit={handleNoteCommit}
+        onNoteTagAdd={handleNoteTagAdd}
+        onNoteTagRemove={handleNoteTagRemove}
       />
     );
   }
 
   return (
-    <Box sx={{ px: { xs: 2, md: 3 }, py: { xs: 2, md: 3 }, maxWidth: 1400, mx: "auto", width: "100%" }}>
+    <Box
+      sx={{
+        px: { xs: 1.5, md: 3 },
+        py: { xs: 1.5, md: 3 },
+        maxWidth: 1400,
+        mx: "auto",
+        width: "100%",
+      }}
+    >
       <Stack spacing={3}>
-        <Stack direction="row" spacing={2} sx={{ alignItems: "flex-start", justifyContent: "space-between" }}>
+        <Stack
+          direction="row"
+          spacing={2}
+          sx={{ alignItems: "flex-start", justifyContent: "space-between" }}
+        >
           <Box>
             <Typography variant="h4" component="h1">
               {sessionDisplayName}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Track live transcript, tag moments, monitor prompts, and keep study context in one flow.
+              Track live transcript, tag moments, monitor prompts, and keep
+              study context in one flow.
             </Typography>
           </Box>
         </Stack>
@@ -622,9 +832,9 @@ export function App() {
           onSelect={session.selectTranscript}
         />
 
-        <Grid container spacing={2.5}>
+        <Grid container spacing={{ xs: 1.5, lg: 2.5 }}>
           <Grid size={{ xs: 12, lg: 7.5 }}>
-            <Stack spacing={2.5}>
+            <Stack spacing={{ xs: 1.5, lg: 2.5 }}>
               <TranscriptComposer
                 disabled={!isConnected}
                 mic={mic}
@@ -633,13 +843,16 @@ export function App() {
                 onVoiceAutoSendChange={setVoiceAutoSend}
                 lineDraft={composerLine}
                 onLineDraftChange={setComposerLine}
-                onSpeakerChange={(id) => { speakerIdRef.current = id; }}
+                onSpeakerChange={(id) => {
+                  speakerIdRef.current = id;
+                }}
                 onSubmit={handleComposerSubmit}
               />
               <TranscriptPanel
                 activeItemId={session.selectedTranscriptId}
                 errorMessage={transcript.errorMessage}
                 items={transcript.items}
+                signals={transcript.signals}
                 status={transcript.status}
                 onSelect={session.selectTranscript}
                 transcriptTags={session.tags}
@@ -655,13 +868,14 @@ export function App() {
                 onNoteAdd={handleNoteAdd}
                 onNoteDelete={handleNoteDelete}
                 onNoteSave={handleNoteSave}
+                onNoteCommit={handleNoteCommit}
                 onNoteTagAdd={handleNoteTagAdd}
                 onNoteTagRemove={handleNoteTagRemove}
               />
             </Stack>
           </Grid>
           <Grid size={{ xs: 12, lg: 4.5 }}>
-            <Stack spacing={2.5}>
+            <Stack spacing={{ xs: 1.5, lg: 2.5 }}>
               <PromptSuggestionPanel
                 prompts={promptSuggestions.prompts}
                 onDismiss={handlePromptDismiss}
@@ -687,6 +901,8 @@ export function App() {
         onPromptUse={handlePromptUse}
         onPromptDismiss={handlePromptDismiss}
         quickTags={session.availableTags.slice(0, 8)}
+        tagShortcutPalette={session.availableTags}
+        quickTagAnchorTranscriptId={session.selectedTranscriptId}
         onQuickTag={handleTagAttach}
         voiceActive={voice.isActive}
         onVoiceToggle={voice.toggle}
@@ -702,6 +918,16 @@ export function App() {
         sessionId={session.sessionId}
         onSystemAudioStart={handleSystemAudioStart}
         transcribing={transcript.transcribing}
+        notes={session.notes}
+        availableTags={session.availableTags}
+        transcriptTags={session.tags}
+        onNotesChange={session.updateNotes}
+        onNoteAdd={handleNoteAdd}
+        onNoteDelete={handleNoteDelete}
+        onNoteSave={handleNoteSave}
+        onNoteCommit={handleNoteCommit}
+        onNoteTagAdd={handleNoteTagAdd}
+        onNoteTagRemove={handleNoteTagRemove}
       />
     </Box>
   );

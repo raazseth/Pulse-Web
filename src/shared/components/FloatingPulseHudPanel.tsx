@@ -21,16 +21,21 @@ import {
 import {
   getFloatingHudTokens,
 } from "@/app/providers/theme";
+import AddIcon from "@mui/icons-material/Add";
 import PictureInPictureAltOutlinedIcon from "@mui/icons-material/PictureInPictureAltOutlined";
 import type { TranscriptItem } from "@/modules/transcript/types";
 import type { TranscriptStreamStatus } from "@/modules/transcript/types";
 import type { PromptSuggestion } from "@/modules/prompts/types";
-import type { TagOption } from "@/modules/tagging/types";
+import type { TagOption, TranscriptTag } from "@/modules/tagging/types";
+import type { SessionNote } from "@/modules/context/types";
 import {
   formatCtrlShortcut,
   indexForPaletteDigit,
   paletteDigitForTag,
 } from "@/modules/tagging/utils/paletteShortcut";
+import { tagChipOutlinedRestSx } from "@/modules/tagging/utils/tagChipStyles";
+import { formatClock } from "@/shared/utils/formatters";
+import { isIntervieweeSpeaker } from "@/modules/transcript/utils/interviewRoles";
 import {
   HudSuggestionsTab,
   type AcceptedMsg,
@@ -38,12 +43,63 @@ import {
   type TimelineRow,
 } from "./HudSuggestionsTab";
 import { HudComposerBar } from "./HudComposerBar";
+import { HudNotesTab } from "./HudNotesTab";
+import {
+  claimFloatingHudTagDigitShortcuts,
+  releaseFloatingHudTagDigitShortcuts,
+} from "./floatingHudDigitShortcutOwnership";
+import { transcriptLineHasCatalogTag } from "@/modules/tagging/utils/transcriptTagDedupe";
 
 export const FLOATING_HUD_WIDTH = 300;
 
 const Z_FLOAT = 10050;
 type HudLayout = "embed" | "pip";
-type TabKey = "suggestions" | "capture" | "speaker";
+type TabKey = "suggestions" | "capture" | "notes" | "speaker";
+
+function resolveHudQuickTagTranscriptId(
+  preview: TranscriptItem[],
+  prompts: PromptSuggestion[],
+): string | undefined {
+  for (let i = preview.length - 1; i >= 0; i--) {
+    if (isIntervieweeSpeaker(preview[i].speakerId)) return preview[i].id;
+  }
+  const prompt = prompts.length > 0 ? prompts[prompts.length - 1] : undefined;
+  if (prompt) {
+    const ids: string[] = [];
+    const single = String(prompt.transcriptId ?? "").trim();
+    if (single) ids.push(single);
+    for (const raw of prompt.transcriptIds ?? []) {
+      const id = String(raw ?? "").trim();
+      if (id && !ids.includes(id)) ids.push(id);
+    }
+    const idxById = new Map(preview.map((t, j) => [t.id, j]));
+    let bestId: string | undefined;
+    let bestJ = -1;
+    for (const id of ids) {
+      const j = idxById.get(id);
+      if (j !== undefined && j > bestJ) {
+        bestJ = j;
+        bestId = id;
+      }
+    }
+    if (bestId) return bestId;
+  }
+  return preview.at(-1)?.id;
+}
+
+function resolveHudQuickTagTargetTranscriptId(
+  activeTab: TabKey,
+  preview: TranscriptItem[],
+  prompts: PromptSuggestion[],
+  anchorTranscriptId: string | null | undefined,
+): string | undefined {
+  if (activeTab === "suggestions") {
+    return resolveHudQuickTagTranscriptId(preview, prompts);
+  }
+  const anchor = String(anchorTranscriptId ?? "").trim();
+  if (anchor) return anchor;
+  return resolveHudQuickTagTranscriptId(preview, prompts);
+}
 
 function isTextualFieldTarget(target: EventTarget | null): boolean {
   if (!target || !(target instanceof HTMLElement)) return false;
@@ -87,10 +143,15 @@ export interface FloatingPulseHudPanelProps {
   composerLine: string;
   onComposerLineChange: (value: string) => void;
   prompts: PromptSuggestion[];
-  onPromptUse?: (promptId: string) => void;
-  onPromptDismiss?: (promptId: string) => void;
+  acceptedMessages: AcceptedMsg[];
+  dismissedPromptIds: Set<string>;
+  onHudPromptAccept: (prompt: PromptSuggestion) => void;
+  onHudPromptDismissId: (promptId: string) => void;
   quickTags: TagOption[];
-  onQuickTag?: (tagId: string) => void;
+  tagShortcutPalette?: TagOption[];
+  keyboardTargetWindow?: Window;
+  quickTagAnchorTranscriptId?: string | null;
+  onQuickTag?: (tagId: string, transcriptIdOverride?: string) => void;
   voiceActive?: boolean;
   onVoiceToggle?: () => void;
   onSendChunk?: (payload: { text: string; speakerId: string }) => boolean;
@@ -99,6 +160,16 @@ export interface FloatingPulseHudPanelProps {
   onSpeakerChange?: (speakerId: string) => void;
   sessionTitle?: string;
   sessionId?: string;
+  notes?: SessionNote[];
+  availableTags?: TagOption[];
+  transcriptTags?: TranscriptTag[];
+  onNotesChange?: (notes: SessionNote[]) => void;
+  onNoteAdd?: () => void;
+  onNoteDelete?: (noteId: string) => void;
+  onNoteSave?: (note: SessionNote) => void;
+  onNoteCommit?: (note: SessionNote) => void;
+  onNoteTagAdd?: (noteId: string, tagId: string) => void;
+  onNoteTagRemove?: (noteId: string, tagId: string) => void;
 }
 
 export const FloatingPulseHudPanel = memo(function FloatingPulseHudPanel({
@@ -114,9 +185,14 @@ export const FloatingPulseHudPanel = memo(function FloatingPulseHudPanel({
   composerLine = "",
   onComposerLineChange,
   prompts,
-  onPromptUse,
-  onPromptDismiss,
+  acceptedMessages,
+  dismissedPromptIds,
+  onHudPromptAccept,
+  onHudPromptDismissId,
   quickTags,
+  tagShortcutPalette,
+  keyboardTargetWindow,
+  quickTagAnchorTranscriptId,
   onQuickTag,
   voiceActive = false,
   onVoiceToggle,
@@ -126,14 +202,22 @@ export const FloatingPulseHudPanel = memo(function FloatingPulseHudPanel({
   onSpeakerChange,
   sessionTitle,
   sessionId,
+  notes = [],
+  availableTags = [],
+  transcriptTags = [],
+  onNotesChange,
+  onNoteAdd,
+  onNoteDelete,
+  onNoteSave,
+  onNoteCommit,
+  onNoteTagAdd,
+  onNoteTagRemove,
 }: FloatingPulseHudPanelProps) {
   const theme = useTheme();
   const hud = useMemo(() => getFloatingHudTokens(theme), [theme]);
 
   const [activeTab, setActiveTab] = useState<TabKey>("suggestions");
-  const [dismissedPromptIds, setDismissedPromptIds] = useState<Set<string>>(() => new Set());
   const [rejectingIds, setRejectingIds] = useState<Set<string>>(() => new Set());
-  const [acceptedMessages, setAcceptedMessages] = useState<AcceptedMsg[]>([]);
   const [pendingMessages, setPendingMessages] = useState<PendingMsg[]>([]);
 
   const suggestionsScrollRef = useRef<HTMLDivElement>(null);
@@ -148,6 +232,29 @@ export const FloatingPulseHudPanel = memo(function FloatingPulseHudPanel({
   const transcriptLoading =
     transcriptStatus === "connecting" || transcriptStatus === "reconnecting";
   const isPip = layout === "pip";
+
+  const tagShortcutPaletteResolved = useMemo(
+    () =>
+      tagShortcutPalette && tagShortcutPalette.length > 0
+        ? tagShortcutPalette
+        : quickTags,
+    [tagShortcutPalette, quickTags],
+  );
+
+  const captureFeedSorted = useMemo(() => {
+    if (!transcriptTags.length) return [];
+    return [...transcriptTags]
+      .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
+      .slice(0, 25);
+  }, [transcriptTags]);
+
+  useLayoutEffect(() => {
+    if (!visible || !onQuickTag || !tagShortcutPaletteResolved.length) return;
+    claimFloatingHudTagDigitShortcuts();
+    return () => {
+      releaseFloatingHudTagDigitShortcuts();
+    };
+  }, [visible, onQuickTag, tagShortcutPaletteResolved.length]);
 
   const sessionHeading = useMemo(() => {
     const title = sessionTitle?.trim();
@@ -258,47 +365,26 @@ export const FloatingPulseHudPanel = memo(function FloatingPulseHudPanel({
     };
   }, [activeTab, transcriptScrollSig, scrollSpeakerFeedToBottom]);
 
-  const timelineCurrentSpeaker = useMemo(() => {
-    const raw = getDefaultSpeakerId?.();
-    return (
-      typeof raw === "string" && raw.trim() ? raw.trim() : "interviewer"
-    ).toLowerCase();
-  }, [getDefaultSpeakerId]);
-
   const handlePromptAccept = useCallback(
     (prompt: PromptSuggestion) => {
-      setAcceptedMessages((prev) => [
-        ...prev,
-        {
-          id: `accepted-${prompt.id}`,
-          text: prompt.body || prompt.title,
-          title: prompt.title,
-          timestamp: prompt.timestamp,
-          origin: prompt.suggestionOrigin ?? "local",
-          transcriptId: prompt.transcriptId,
-          transcriptIds: prompt.transcriptIds,
-        },
-      ]);
-      setDismissedPromptIds((prev) => new Set([...prev, prompt.id]));
-      onPromptUse?.(prompt.id);
+      onHudPromptAccept(prompt);
     },
-    [onPromptUse],
+    [onHudPromptAccept],
   );
 
   const handlePromptReject = useCallback(
     (id: string) => {
       setRejectingIds((prev) => new Set([...prev, id]));
       setTimeout(() => {
-        setDismissedPromptIds((prev) => new Set([...prev, id]));
+        onHudPromptDismissId(id);
         setRejectingIds((prev) => {
           const next = new Set(prev);
           next.delete(id);
           return next;
         });
-        onPromptDismiss?.(id);
       }, 210);
     },
-    [onPromptDismiss],
+    [onHudPromptDismissId],
   );
 
   useEffect(() => {
@@ -333,28 +419,12 @@ export const FloatingPulseHudPanel = memo(function FloatingPulseHudPanel({
     );
   }, [pendingMessages.length]);
 
-  useEffect(() => {
-    if (!visible || activeTab !== "capture" || !onQuickTag) return;
-    const tags = quickTags;
-    if (!tags.length) return;
+  const canAddHudNote = useMemo(() => !notes.some((n) => n.isDraft), [notes]);
 
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (!e.ctrlKey || e.shiftKey || e.altKey || e.metaKey || e.repeat) return;
-      const digit = e.key.length === 1 && /^[0-9]$/.test(e.key) ? e.key : null;
-      if (!digit) return;
-      const idx = indexForPaletteDigit(tags, digit);
-      if (idx < 0) return;
-      if (isTextualFieldTarget(e.target)) return;
-      const tag = tags[idx];
-      if (!tag) return;
-      e.preventDefault();
-      e.stopPropagation();
-      onQuickTag(tag.id);
-    };
-
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [visible, activeTab, onQuickTag, quickTags]);
+  const handleHudHeaderAddNote = useCallback(() => {
+    setActiveTab("notes");
+    if (!notes.some((n) => n.isDraft)) onNoteAdd?.();
+  }, [notes, onNoteAdd]);
 
   const mergedConversationTimeline = useMemo(() => {
     const parseMs = (ts: string) => {
@@ -524,19 +594,151 @@ export const FloatingPulseHudPanel = memo(function FloatingPulseHudPanel({
     );
   }, [displayTranscriptPreview, orderedSuggestions]);
 
+  const quickTagTargetTranscriptId = useMemo(
+    () =>
+      resolveHudQuickTagTargetTranscriptId(
+        activeTab,
+        displayTranscriptPreview,
+        latestMessageSuggestions,
+        quickTagAnchorTranscriptId,
+      ),
+    [
+      activeTab,
+      displayTranscriptPreview,
+      latestMessageSuggestions,
+      quickTagAnchorTranscriptId,
+    ],
+  );
+
   const suggestionsLoading = useMemo(() => {
     if (transcriptStatus !== "connected") return transcriptLoading;
-    if (!displayTranscriptPreview.length) return false;
-    const latestTranscriptMs = displayTranscriptPreview.reduce((acc, item) => {
-      const ts = Date.parse(item.timestamp);
-      return Number.isNaN(ts) ? acc : Math.max(acc, ts);
-    }, 0);
-    const latestPromptMs = latestMessageSuggestions.reduce((acc, p) => {
-      const ts = Date.parse(p.timestamp);
-      return Number.isNaN(ts) ? acc : Math.max(acc, ts);
-    }, 0);
-    return transcriptLoading || latestPromptMs < latestTranscriptMs;
-  }, [transcriptStatus, transcriptLoading, displayTranscriptPreview, latestMessageSuggestions]);
+    const tail = displayTranscriptPreview.at(-1);
+    if (!tail) return false;
+
+    const parseMs = (ts: string) => {
+      const ms = Date.parse(ts);
+      return Number.isNaN(ms) ? 0 : ms;
+    };
+    const tailMs = parseMs(tail.timestamp);
+
+    // AI follow-ups are generated for interviewee (mic) lines; do not spin after interviewer-only tail.
+    if (!isIntervieweeSpeaker(tail.speakerId)) {
+      return transcriptLoading;
+    }
+
+    const idsForTranscriptRef = (single: string | undefined, list: string[] | undefined) => {
+      const ids = new Set<string>();
+      const one = String(single ?? "").trim();
+      if (one) ids.add(one);
+      for (const raw of list ?? []) {
+        const id = String(raw ?? "").trim();
+        if (id) ids.add(id);
+      }
+      return ids;
+    };
+
+    const promptRefsTail = (p: PromptSuggestion) =>
+      idsForTranscriptRef(p.transcriptId, p.transcriptIds).has(tail.id);
+
+    const acceptedRefsTail = (a: AcceptedMsg) =>
+      idsForTranscriptRef(a.transcriptId, a.transcriptIds).has(tail.id);
+
+    let resolvedMs = 0;
+    for (const p of visiblePrompts) {
+      if (promptRefsTail(p)) resolvedMs = Math.max(resolvedMs, parseMs(p.timestamp));
+    }
+    for (const a of acceptedMessages) {
+      if (acceptedRefsTail(a)) {
+        // Accept dismisses the prompt; treat the line as handled even if prompt.timestamp < transcript (ordering skew).
+        resolvedMs = Math.max(resolvedMs, parseMs(a.timestamp), tailMs);
+      }
+    }
+
+    const anchoredToTail = prompts.filter((p) => promptRefsTail(p));
+    const allAnchoredHandled =
+      anchoredToTail.length > 0 &&
+      anchoredToTail.every(
+        (p) =>
+          dismissedPromptIds.has(p.id) ||
+          acceptedMessages.some((a) => a.id === `accepted-${p.id}`),
+      );
+    if (allAnchoredHandled && resolvedMs < tailMs) {
+      resolvedMs = tailMs;
+    }
+
+    return transcriptLoading || resolvedMs < tailMs;
+  }, [
+    transcriptStatus,
+    transcriptLoading,
+    displayTranscriptPreview,
+    visiblePrompts,
+    acceptedMessages,
+    prompts,
+    dismissedPromptIds,
+  ]);
+
+  useEffect(() => {
+    if (!visible || !onQuickTag) return;
+    const tags = tagShortcutPaletteResolved;
+    if (!tags.length) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.shiftKey || e.altKey || e.metaKey || e.repeat) return;
+      const digit = e.key.length === 1 && /^[0-9]$/.test(e.key) ? e.key : null;
+      if (!digit) return;
+      const idx = indexForPaletteDigit(tags, digit);
+      if (idx < 0) return;
+      if (isTextualFieldTarget(e.target)) return;
+      const tag = tags[idx];
+      if (!tag) return;
+
+      const previewSnap = displayTranscriptPreview;
+      const promptsSnap = latestMessageSuggestions;
+      const transcriptOverride = resolveHudQuickTagTargetTranscriptId(
+        activeTab,
+        previewSnap,
+        promptsSnap,
+        quickTagAnchorTranscriptId,
+      );
+      if (
+        transcriptOverride &&
+        transcriptLineHasCatalogTag(transcriptTags, transcriptOverride, tag.id)
+      ) {
+        return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const runTag = () => {
+        onQuickTag(tag.id, transcriptOverride);
+      };
+
+      if (activeTab !== "capture") {
+        setActiveTab("capture");
+        window.setTimeout(runTag, 0);
+      } else {
+        runTag();
+      }
+    };
+
+    const hostWin =
+      keyboardTargetWindow ??
+      (typeof window !== "undefined" ? window : null);
+    if (!hostWin) return;
+
+    hostWin.addEventListener("keydown", onKeyDown, true);
+    return () => hostWin.removeEventListener("keydown", onKeyDown, true);
+  }, [
+    visible,
+    onQuickTag,
+    tagShortcutPaletteResolved,
+    keyboardTargetWindow,
+    quickTagAnchorTranscriptId,
+    activeTab,
+    displayTranscriptPreview,
+    latestMessageSuggestions,
+  ]);
 
   const rootSx = isPip
     ? {
@@ -551,10 +753,10 @@ export const FloatingPulseHudPanel = memo(function FloatingPulseHudPanel({
       }
     : {
         position: "fixed" as const,
-        right: 16,
+        right: { xs: 8, sm: 16 },
         bottom: "max(16px, env(safe-area-inset-bottom, 0px))",
-        width: FLOATING_HUD_WIDTH,
-        maxWidth: "calc(100vw - 24px)",
+        width: { xs: "calc(100vw - 16px)", sm: FLOATING_HUD_WIDTH },
+        maxWidth: { xs: "100vw", sm: "calc(100vw - 24px)" },
         maxHeight: "min(640px, calc(100vh - 32px))",
         zIndex: Z_FLOAT,
         pointerEvents: visible ? ("auto" as const) : ("none" as const),
@@ -650,6 +852,19 @@ export const FloatingPulseHudPanel = memo(function FloatingPulseHudPanel({
             />
             <Tab value="capture" label="Capture" />
             <Tab
+              value="notes"
+              label={
+                <Stack sx={{ flexDirection: "row", alignItems: "center", gap: 0.5 }}>
+                  Session notes
+                  {notes.length > 0 && (
+                    <Box sx={{ minWidth: 16, height: 16, borderRadius: "999px", bgcolor: alpha(theme.palette.common.white, 0.12), color: hud.hi, fontSize: "0.55rem", fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", px: 0.5 }}>
+                      {notes.length}
+                    </Box>
+                  )}
+                </Stack>
+              }
+            />
+            <Tab
               value="speaker"
               label="Speaker"
               onClick={() => {
@@ -660,6 +875,30 @@ export const FloatingPulseHudPanel = memo(function FloatingPulseHudPanel({
             />
           </Tabs>
 
+          {onNoteAdd ? (
+            <Tooltip
+              title={
+                canAddHudNote
+                  ? "Add session note (opens Session notes tab)"
+                  : "Open Session notes — finish or delete the draft note before adding another."
+              }
+            >
+              <IconButton
+                size="small"
+                onClick={handleHudHeaderAddNote}
+                aria-label="Add session note"
+                sx={{
+                  alignSelf: "center",
+                  mx: 0.25,
+                  color: hud.mid,
+                  "&:hover": { color: hud.hi, bgcolor: hud.hoverChrome },
+                }}
+              >
+                <AddIcon sx={{ fontSize: 20 }} />
+              </IconButton>
+            </Tooltip>
+          ) : null}
+
           {sessionHeading ? (
             <Tooltip title={sessionHeadingTooltip} placement="bottom">
               <Box
@@ -668,7 +907,7 @@ export const FloatingPulseHudPanel = memo(function FloatingPulseHudPanel({
                   alignItems: "center",
                   justifyContent: "flex-end",
                   flexShrink: 0,
-                  pl: 0.75,
+                  pl: 0.5,
                   pr: 0.5,
                   maxWidth: "min(200px, 38%)",
                   minWidth: 0,
@@ -705,7 +944,6 @@ export const FloatingPulseHudPanel = memo(function FloatingPulseHudPanel({
             latestMessageSuggestions={latestMessageSuggestions}
             suggestionsLoading={suggestionsLoading}
             rejectingIds={rejectingIds}
-            timelineCurrentSpeaker={timelineCurrentSpeaker}
             onPromptAccept={handlePromptAccept}
             onPromptReject={handlePromptReject}
           />
@@ -715,20 +953,37 @@ export const FloatingPulseHudPanel = memo(function FloatingPulseHudPanel({
           <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", px: 1.5, py: 1.5 }}>
             <Stack spacing={1.5}>
               <Typography variant="body2" sx={{ lineHeight: 1.55, color: hud.mid, fontSize: "0.8125rem" }}>
-                Tap a tag to attach it to the currently selected transcript line.
+                Tap a tag or use Ctrl+1–9. Each capture stores the flag, transcript line time, a text snippet, and when you captured it. From Live feed, shortcuts follow mic → AI anchor → latest line; from other tabs they use the selected line in the main view when set, otherwise the same fallback.
               </Typography>
               {quickTags.length ? (
                 <>
                   <Typography variant="caption" sx={{ display: "block", color: hud.faint, fontSize: "0.625rem", lineHeight: 1.5 }}>
-                    Keyboard shortcuts apply while this tab is open and focus is not in a text field.
+                    Ctrl+1–9 from Capture or Live feed (switches to Capture). Chips use the same target line as shortcuts.
                   </Typography>
-                  <Stack sx={{ flexDirection: "row", flexWrap: "wrap", gap: 1 }}>
+                  <Stack sx={{ flexDirection: "row", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
                     {quickTags.map((tag, idx) => {
                       const digitKey = paletteDigitForTag(tag, idx);
                       const shortcutText = digitKey ? formatCtrlShortcut(digitKey) : null;
                       const displayName = String(tag.label ?? "").trim() || tag.id;
+                      const targetId = quickTagTargetTranscriptId;
+                      const alreadyOnTargetLine =
+                        Boolean(targetId) &&
+                        transcriptLineHasCatalogTag(
+                          transcriptTags,
+                          targetId as string,
+                          tag.id,
+                        );
                       return (
-                        <Tooltip key={tag.id} title={shortcutText ? `${displayName} (${shortcutText})` : displayName}>
+                        <Tooltip
+                          key={tag.id}
+                          title={
+                            alreadyOnTargetLine
+                              ? `${displayName} — already on this line`
+                              : shortcutText
+                                ? `${displayName} (${shortcutText})`
+                                : displayName
+                          }
+                        >
                           <Chip
                             label={
                               <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, py: 0.1 }}>
@@ -744,13 +999,25 @@ export const FloatingPulseHudPanel = memo(function FloatingPulseHudPanel({
                             }
                             size="small"
                             variant="outlined"
-                            onClick={() => onQuickTag?.(tag.id)}
+                            disabled={alreadyOnTargetLine}
+                            onClick={() => {
+                              if (alreadyOnTargetLine) return;
+                              const tid = resolveHudQuickTagTargetTranscriptId(
+                                activeTab,
+                                displayTranscriptPreview,
+                                latestMessageSuggestions,
+                                quickTagAnchorTranscriptId,
+                              );
+                              onQuickTag?.(tag.id, tid);
+                            }}
                             sx={{
                               height: "auto",
                               minHeight: 32,
                               py: 0.4,
                               fontWeight: 500,
-                              cursor: onQuickTag ? "pointer" : "default",
+                              cursor:
+                                onQuickTag && !alreadyOnTargetLine ? "pointer" : "default",
+                              opacity: alreadyOnTargetLine ? 0.45 : 1,
                               color: hud.hi,
                               borderColor: hud.border,
                               bgcolor: alpha(theme.palette.common.white, 0.05),
@@ -770,8 +1037,104 @@ export const FloatingPulseHudPanel = memo(function FloatingPulseHudPanel({
                   No quick tags configured.
                 </Typography>
               )}
+
+              <Typography variant="overline" sx={{ color: hud.faint, fontSize: "0.65rem", letterSpacing: "0.08em", lineHeight: 1.5, pt: 0.5 }}>
+                Recent captures
+              </Typography>
+              {captureFeedSorted.length ? (
+                <Stack spacing={1}>
+                  {captureFeedSorted.map((ct) => {
+                    const catalog = availableTags.find((o) => o.id === ct.tagId);
+                    const flagLabel = String(catalog?.label ?? ct.tagId).trim() || ct.tagId;
+                    const flagColor = (catalog?.color ?? "default") as TagOption["color"];
+                    const lineAt = ct.transcriptLineAt?.trim();
+                    const lineClock = lineAt ? formatClock(lineAt) : null;
+                    const capClock = formatClock(ct.timestamp);
+                    const fromPreview =
+                      ct.transcriptId &&
+                      displayTranscriptPreview.find((t) => t.id === ct.transcriptId)?.text;
+                    const msg =
+                      (ct.messagePreview?.trim() || String(fromPreview ?? "").trim()) || "";
+                    const msgDisplay = msg || "—";
+                    return (
+                      <Box
+                        key={ct.id}
+                        sx={{
+                          borderRadius: 1.25,
+                          border: `1px solid ${hud.border}`,
+                          bgcolor: alpha(theme.palette.common.white, 0.04),
+                          p: 1,
+                        }}
+                      >
+                        <Stack sx={{ flexDirection: "row", alignItems: "flex-start", gap: 1.25 }}>
+                          <Chip
+                            size="small"
+                            label={flagLabel}
+                            color={flagColor === "default" ? "default" : flagColor}
+                            variant="outlined"
+                            sx={{
+                              flexShrink: 0,
+                              fontWeight: 700,
+                              fontSize: "0.7rem",
+                              height: 28,
+                              mt: "2px",
+                              maxWidth: { xs: "min(120px, 36%)", sm: 132 },
+                              "& .MuiChip-label": {
+                                px: 1,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                display: "block",
+                              },
+                              ...tagChipOutlinedRestSx(theme, flagColor),
+                            }}
+                          />
+                          <Stack spacing={0.35} sx={{ minWidth: 0, flex: 1, pt: 0.125 }}>
+                            <Typography variant="caption" sx={{ color: hud.faint, fontSize: "0.62rem", lineHeight: 1.35 }}>
+                              {lineClock ? `Line ${lineClock}` : "Line —"}
+                              {" · "}
+                              Captured {capClock}
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                color: hud.hi,
+                                fontSize: "0.78rem",
+                                lineHeight: 1.45,
+                                wordBreak: "break-word",
+                              }}
+                            >
+                              {msgDisplay}
+                            </Typography>
+                          </Stack>
+                        </Stack>
+                      </Box>
+                    );
+                  })}
+                </Stack>
+              ) : (
+                <Typography variant="body2" sx={{ color: hud.low }}>
+                  No captures yet — use the tags above or Ctrl+1–9.
+                </Typography>
+              )}
             </Stack>
           </Box>
+        ) : null}
+
+        {activeTab === "notes" ? (
+          <HudNotesTab
+            hud={hud}
+            notes={notes}
+            availableTags={availableTags}
+            transcriptTags={transcriptTags}
+            onNotesChange={onNotesChange}
+            onNoteAdd={onNoteAdd}
+            onNoteDelete={onNoteDelete}
+            onNoteSave={onNoteSave}
+            onNoteCommit={onNoteCommit}
+            onNoteTagAdd={onNoteTagAdd}
+            onNoteTagRemove={onNoteTagRemove}
+          />
         ) : null}
 
         {activeTab === "speaker" ? (

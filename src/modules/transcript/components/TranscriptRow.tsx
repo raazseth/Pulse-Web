@@ -2,11 +2,12 @@ import { memo, useMemo } from "react";
 import { alpha, Box, Chip, Stack, Typography, useTheme } from "@mui/material";
 import type { TagOption, TranscriptTag } from "@/modules/tagging/types";
 import { tagChipOutlinedRestSx } from "@/modules/tagging/utils/tagChipStyles";
-import { TranscriptItem } from "@/modules/transcript/types";
+import { TranscriptItem, TranscriptSignalCue } from "@/modules/transcript/types";
 
 interface TranscriptRowProps {
   isActive: boolean;
   item: TranscriptItem;
+  rowSignals?: TranscriptSignalCue[];
   onSelect: (id: string) => void;
   transcriptTags?: TranscriptTag[];
   availableTags?: TagOption[];
@@ -30,6 +31,7 @@ function tagChipProps(tag: TranscriptTag, catalog: TagOption[] | undefined) {
 function TranscriptRowComponent({
   isActive,
   item,
+  rowSignals,
   onSelect,
   transcriptTags,
   availableTags,
@@ -44,8 +46,18 @@ function TranscriptRowComponent({
 
   return (
     <Box
+      component="div"
+      role="button"
+      tabIndex={0}
+      aria-current={isActive ? "location" : undefined}
       id={`transcript-row-${item.id}`}
       onClick={() => onSelect(item.id)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(item.id);
+        }
+      }}
       sx={{
         px: 1.5,
         py: 1.25,
@@ -113,6 +125,20 @@ function TranscriptRowComponent({
                   />
                 );
               })}
+            </Stack>
+          ) : null}
+          {rowSignals && rowSignals.length > 0 ? (
+            <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
+              {rowSignals.map((s) => (
+                <Chip
+                  key={s.id}
+                  label={s.label}
+                  size="small"
+                  variant="outlined"
+                  color="info"
+                  sx={{ height: 20, fontSize: "0.625rem", fontWeight: 600 }}
+                />
+              ))}
             </Stack>
           ) : null}
         </Stack>

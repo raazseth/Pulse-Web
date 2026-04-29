@@ -8,6 +8,7 @@ interface UseSystemAudioCaptureOptions {
   onError?: () => void;
   accessToken?: string | null;
   refreshAccessToken?: () => Promise<string | null>;
+  transcribeSessionId?: string | null;
   lang?: string;
   chunkIntervalMs?: number;
 }
@@ -40,6 +41,7 @@ export function useSystemAudioCapture({
   onError,
   accessToken,
   refreshAccessToken,
+  transcribeSessionId = null,
   lang = "en-US",
   chunkIntervalMs = 3000,
 }: UseSystemAudioCaptureOptions) {
@@ -66,6 +68,11 @@ export function useSystemAudioCapture({
 
   const refreshAccessTokenRef = useRef(refreshAccessToken);
   useEffect(() => { refreshAccessTokenRef.current = refreshAccessToken; });
+
+  const transcribeSessionIdRef = useRef(transcribeSessionId ?? null);
+  useEffect(() => {
+    transcribeSessionIdRef.current = transcribeSessionId ?? null;
+  });
 
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -166,7 +173,11 @@ export function useSystemAudioCapture({
           const controller = new AbortController();
           activeRequestsRef.current.add(controller);
 
-          const transcribeUrl = `${getAudioTranscribeUrl()}?lang=${encodeURIComponent(lang)}`;
+          const qs = new URLSearchParams({ lang });
+          const sid = transcribeSessionIdRef.current?.trim();
+          if (sid) qs.set("sessionId", sid);
+          if (chunkMime) qs.set("mime", chunkMime);
+          const transcribeUrl = `${getAudioTranscribeUrl()}?${qs.toString()}`;
           try {
             const res = await fetchWithAuth(
               transcribeUrl,

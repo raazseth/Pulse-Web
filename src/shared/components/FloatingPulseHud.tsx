@@ -22,6 +22,7 @@ import {
 import { ThemeProvider } from "@mui/material/styles";
 import PlayArrowRoundedIcon from "@mui/icons-material/PlayArrowRounded";
 import { FloatingPulseHudPanel } from "@/shared/components/FloatingPulseHudPanel";
+import { useHudAcceptedPromptState } from "@/shared/hooks/useHudAcceptedPromptState";
 import { useTabBackgrounded } from "@/shared/hooks/useTabBackgrounded";
 import { seedPictureInPictureDocument } from "@/shared/utils/seedPictureInPictureDocument";
 import type {
@@ -29,7 +30,8 @@ import type {
   TranscriptStreamStatus,
 } from "@/modules/transcript/types";
 import type { PromptSuggestion } from "@/modules/prompts/types";
-import type { TagOption } from "@/modules/tagging/types";
+import type { TagOption, TranscriptTag } from "@/modules/tagging/types";
+import type { SessionNote } from "@/modules/context/types";
 
 const HELP_PAGE =
   "In-page float: only while this Pulse tab is in the background (Page Visibility). For Meet/Teams, use “Always on top” (Chrome/Edge) or tile windows.";
@@ -64,7 +66,9 @@ export interface FloatingPulseHudProps {
   onPromptUse?: (promptId: string) => void;
   onPromptDismiss?: (promptId: string) => void;
   quickTags: TagOption[];
-  onQuickTag?: (tagId: string) => void;
+  tagShortcutPalette?: TagOption[];
+  quickTagAnchorTranscriptId?: string | null;
+  onQuickTag?: (tagId: string, transcriptIdOverride?: string) => void;
   voiceActive?: boolean;
   onVoiceToggle?: () => void;
   onSendChunk?: (payload: { text: string; speakerId: string }) => boolean;
@@ -77,6 +81,16 @@ export interface FloatingPulseHudProps {
   sessionId?: string;
   onSystemAudioStart?: () => Promise<void> | void;
   transcribing?: boolean;
+  notes?: SessionNote[];
+  availableTags?: TagOption[];
+  transcriptTags?: TranscriptTag[];
+  onNotesChange?: (notes: SessionNote[]) => void;
+  onNoteAdd?: () => void;
+  onNoteDelete?: (noteId: string) => void;
+  onNoteSave?: (note: SessionNote) => void;
+  onNoteCommit?: (note: SessionNote) => void;
+  onNoteTagAdd?: (noteId: string, tagId: string) => void;
+  onNoteTagRemove?: (noteId: string, tagId: string) => void;
 }
 
 export function FloatingPulseHud(props: FloatingPulseHudProps) {
@@ -88,6 +102,8 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
     onPromptUse,
     onPromptDismiss,
     quickTags,
+    tagShortcutPalette,
+    quickTagAnchorTranscriptId,
     onQuickTag,
     voiceActive = false,
     onVoiceToggle,
@@ -101,6 +117,16 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
     sessionId,
     onSystemAudioStart,
     transcribing = false,
+    notes = [],
+    availableTags = [],
+    transcriptTags = [],
+    onNotesChange,
+    onNoteAdd,
+    onNoteDelete,
+    onNoteSave,
+    onNoteCommit,
+    onNoteTagAdd,
+    onNoteTagRemove,
   } = props;
 
   const theme = useTheme();
@@ -115,6 +141,13 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
   const pipMountRef = useRef<HTMLDivElement | null>(null);
   const pipWinRef = useRef<Window | null>(null);
   const closePipRef = useRef<(() => void) | null>(null);
+
+  const {
+    acceptedMessages,
+    dismissedPromptIds,
+    handleHudPromptAccept,
+    handleHudPromptDismissId,
+  } = useHudAcceptedPromptState(sessionId, onPromptUse, onPromptDismiss);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setMounted(true));
@@ -205,9 +238,9 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
       transcriptPreview,
       transcriptStatus,
       prompts,
-      onPromptUse,
-      onPromptDismiss,
       quickTags,
+      tagShortcutPalette,
+      quickTagAnchorTranscriptId,
       onQuickTag,
       voiceActive,
       onVoiceToggle,
@@ -220,14 +253,28 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
       sessionTitle,
       sessionId,
       onClose: handleDismiss,
+      notes,
+      availableTags,
+      transcriptTags,
+      onNotesChange,
+      onNoteAdd,
+      onNoteDelete,
+      onNoteSave,
+      onNoteCommit,
+      onNoteTagAdd,
+      onNoteTagRemove,
+      acceptedMessages,
+      dismissedPromptIds,
+      onHudPromptAccept: handleHudPromptAccept,
+      onHudPromptDismissId: handleHudPromptDismissId,
     }),
     [
       transcriptPreview,
       transcriptStatus,
       prompts,
-      onPromptUse,
-      onPromptDismiss,
       quickTags,
+      tagShortcutPalette,
+      quickTagAnchorTranscriptId,
       onQuickTag,
       voiceActive,
       onVoiceToggle,
@@ -240,6 +287,20 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
       sessionTitle,
       sessionId,
       handleDismiss,
+      notes,
+      availableTags,
+      transcriptTags,
+      onNotesChange,
+      onNoteAdd,
+      onNoteDelete,
+      onNoteSave,
+      onNoteCommit,
+      onNoteTagAdd,
+      onNoteTagRemove,
+      acceptedMessages,
+      dismissedPromptIds,
+      handleHudPromptAccept,
+      handleHudPromptDismissId,
     ],
   );
 
@@ -290,6 +351,7 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
             layout="pip"
             helpText={HELP_PIP}
             showPipLaunch={false}
+            keyboardTargetWindow={pipWindow}
           />
         </ThemeProvider>
       </CacheProvider>,

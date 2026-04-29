@@ -1,11 +1,11 @@
 import { useEffect, useEffectEvent } from "react";
 import type { TagOption } from "@/modules/tagging/types";
 import { indexForPaletteDigit } from "@/modules/tagging/utils/paletteShortcut";
+import { floatingHudOwnsTagDigitShortcuts } from "@/shared/components/floatingHudDigitShortcutOwnership";
 
 interface UseTaggingShortcutsOptions {
   onTagLatest: () => void;
   tagPalette?: TagOption[];
-                                                                                   
   onFocusTagByIndex?: (index: number) => void;
 }
 
@@ -44,6 +44,9 @@ export function useTaggingShortcuts({
       }
 
       if (/^[1-9]$/.test(event.key) && tagPalette && tagPalette.length > 0 && onFocusTagByIndex) {
+        if (floatingHudOwnsTagDigitShortcuts()) {
+          return;
+        }
         const idx = indexForPaletteDigit(tagPalette, event.key);
         if (idx >= 0) {
           event.preventDefault();

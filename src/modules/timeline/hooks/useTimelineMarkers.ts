@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { TranscriptTag } from "@/modules/tagging/types";
 import { TranscriptItem, TranscriptSignalCue } from "@/modules/transcript/types";
+import { isIntervieweeSpeaker } from "@/modules/transcript/utils/interviewRoles";
 import { PromptSuggestion } from "@/modules/prompts/types";
 import { TimelineMarker } from "@/modules/timeline/types";
 
@@ -12,10 +13,27 @@ interface UseTimelineMarkersOptions {
 }
 
 const SIGNAL_LABELS: Record<TranscriptSignalCue["kind"], string> = {
-  silence: "Silence",
-  "sentiment-shift": "Sentiment",
-  keyword: "Keyword",
+  silence: "Lexical",
+  "sentiment-shift": "Lexical",
+  keyword: "Lexical",
 };
+
+function promptTimelineItemId(
+  prompt: PromptSuggestion,
+  transcripts: TranscriptItem[],
+): string | undefined {
+  const ids = prompt.transcriptIds?.length
+    ? prompt.transcriptIds
+    : prompt.transcriptId
+      ? [prompt.transcriptId]
+      : [];
+  for (let i = ids.length - 1; i >= 0; i--) {
+    const id = ids[i];
+    const row = transcripts.find((t) => t.id === id);
+    if (row && isIntervieweeSpeaker(row.speakerId)) return id;
+  }
+  return ids[ids.length - 1];
+}
 
 
 
@@ -50,7 +68,7 @@ export function useTimelineMarkers({
       })),
       ...prompts.slice(-TIMELINE_LIMITS.prompts).map((prompt) => ({
         id: prompt.id,
-        itemId: prompt.transcriptId,
+        itemId: promptTimelineItemId(prompt, transcripts),
         kind: "prompt" as const,
         label: prompt.title,
         timestamp: prompt.timestamp,
@@ -59,7 +77,7 @@ export function useTimelineMarkers({
         id: signal.id,
         itemId: signal.transcriptId,
         kind: "signal" as const,
-        label: `${SIGNAL_LABELS[signal.kind]}: ${signal.label}`,
+        label: signal.label,
         timestamp: signal.timestamp,
       })),
     ].sort(

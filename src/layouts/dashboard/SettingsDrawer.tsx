@@ -1,23 +1,27 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   Avatar,
   Box,
   Button,
   CircularProgress,
   Divider,
   Drawer,
+  FormControl,
   IconButton,
+  InputLabel,
+  MenuItem,
+  Select,
   Stack,
   TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
 import CheckRoundedIcon from "@mui/icons-material/CheckRounded";
+import CloudDownloadRoundedIcon from "@mui/icons-material/CloudDownloadRounded";
+import DesktopWindowsRoundedIcon from "@mui/icons-material/DesktopWindowsRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import ContentCopyRoundedIcon from "@mui/icons-material/ContentCopyRounded";
-import DataObjectRoundedIcon from "@mui/icons-material/DataObjectRounded";
-import DownloadRoundedIcon from "@mui/icons-material/DownloadRounded";
-import GridOnRoundedIcon from "@mui/icons-material/GridOnRounded";
 import LoginRoundedIcon from "@mui/icons-material/LoginRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
 import { useNavigate } from "react-router-dom";
@@ -25,6 +29,9 @@ import { useAuth } from "@/modules/auth/hooks/useAuthStore";
 import { useSessionStore } from "@/modules/context/hooks/useSessionStore";
 import { useSessionList } from "@/modules/context/hooks/useSessionList";
 import { LiveDot } from "@/shared/components/LiveDot";
+import { useToast } from "@/shared/components/Toast";
+import { getHudExportUrl } from "@/shared/utils/hudApi";
+import { fetchWithAuth } from "@/shared/utils/fetchWithAuth";
 
 function initials(name: string) {
   return name
@@ -45,7 +52,8 @@ interface SettingsDrawerProps {
 }
 
 export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, accessToken, refreshAccessToken } = useAuth();
+  const { toast } = useToast();
   const session = useSessionStore();
   const { getSession, updateSessionStatus } = useSessionList();
   const navigate = useNavigate();
@@ -54,54 +62,72 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
   const [joinId, setJoinId] = useState("");
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState("");
+  const [displaySources, setDisplaySources] = useState<Array<{ id: string; name: string }>>([]);
+  const [displaySourceId, setDisplaySourceId] = useState("");
+  const [displaySourcesLoading, setDisplaySourcesLoading] = useState(false);
+  const [displaySourcesError, setDisplaySourcesError] = useState("");
+  const [serverExporting, setServerExporting] = useState<null | "json" | "csv">(null);
+
+  const downloadServerExport = useCallback(
+    async (format: "json" | "csv") => {
+      const id = session.sessionId;
+      if (!id) {
+        toast({ message: "Select a session to export.", severity: "warning" });
+        return;
+      }
+      if (!accessToken) {
+        toast({ message: "Sign in to download server exports.", severity: "warning" });
+        return;
+      }
+      setServerExporting(format);
+      try {
+        const res = await fetchWithAuth(
+          getHudExportUrl(id, format),
+          { method: "GET" },
+          () => accessToken,
+          refreshAccessToken,
+        );
+        if (!res.ok) throw new Error((await res.text()).slice(0, 240));
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `hud-session-${id.slice(0, 8)}.${format}`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        toast({
+          message: e instanceof Error ? e.message : "Server export failed",
+          severity: "error",
+        });
+      } finally {
+        setServerExporting(null);
+      }
+    },
+    [session.sessionId, accessToken, refreshAccessToken, toast],
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    const api = typeof window !== "undefined" ? window.api : undefined;
+    if (!api?.listDisplaySources) return;
+    setDisplaySourcesLoading(true);
+    setDisplaySourcesError("");
+    api
+      .listDisplaySources()
+      .then((rows) => {
+        setDisplaySources(rows);
+        setDisplaySourceId((prev) => prev || rows[0]?.id || "");
+      })
+      .catch(() => setDisplaySourcesError("Could not list capture sources."))
+      .finally(() => setDisplaySourcesLoading(false));
+  }, [open]);
 
   const handleLogout = async () => {
     onClose();
     setConfirmingLogout(false);
     await logout();
     navigate("/login");
-  };
-
-  const handleDownloadJSON = () => {
-    const payload = {
-      sessionId: session.sessionId,
-      status: session.sessionStatus,
-      exportedAt: new Date().toISOString(),
-      metadata: session.metadata,
-      notes: session.notes,
-      tags: session.tags,
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `session-${session.sessionId.slice(0, 8)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleDownloadCSV = () => {
-    const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
-    const header = ["id", "label", "body", "linkedTags"].join(",");
-    const rows = session.notes.map((n) =>
-      [
-        n.id,
-        esc(n.label ?? ""),
-        esc(n.body),
-        esc((n.linkedTagIds ?? []).join(";")),
-      ].join(","),
-    );
-    const blob = new Blob([[header, ...rows].join("\n")], {
-      type: "text/csv;charset=utf-8;",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `session-${session.sessionId.slice(0, 8)}-notes.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   const handleJoin = async () => {
@@ -462,7 +488,7 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                   mb: 1.5,
                 }}
               >
-                <DownloadRoundedIcon
+                <CloudDownloadRoundedIcon
                   sx={{ fontSize: "0.875rem", color: "text.disabled" }}
                 />
                 <Typography
@@ -474,7 +500,7 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                     color: "text.disabled",
                   }}
                 >
-                  Export Session
+                  Export session
                 </Typography>
               </Box>
               <Box
@@ -486,20 +512,22 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                 }}
               >
                 <Box
-                  onClick={handleDownloadJSON}
+                  onClick={() => {
+                    if (serverExporting) return;
+                    void downloadServerExport("json");
+                  }}
                   sx={{
                     display: "flex",
                     alignItems: "center",
                     gap: 1.5,
                     px: 1.75,
                     py: 1.375,
-                    cursor: "pointer",
+                    cursor: serverExporting ? "default" : "pointer",
                     userSelect: "none",
-                    borderBottom: "1px solid",
-                    borderColor: "divider",
                     transition: "background 140ms ease",
-                    "&:hover": { bgcolor: "rgba(245,158,11,0.05)" },
-                    "&:active": { bgcolor: "rgba(245,158,11,0.10)" },
+                    opacity: serverExporting && serverExporting !== "json" ? 0.5 : 1,
+                    "&:hover": { bgcolor: serverExporting ? undefined : "rgba(14,165,233,0.05)" },
+                    "&:active": { bgcolor: serverExporting ? undefined : "rgba(14,165,233,0.10)" },
                   }}
                 >
                   <Box
@@ -507,18 +535,18 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                       width: 36,
                       height: 36,
                       borderRadius: "9px",
-                      bgcolor: "rgba(245,158,11,0.10)",
-                      border: "1px solid rgba(245,158,11,0.22)",
+                      bgcolor: "rgba(14,165,233,0.10)",
+                      border: "1px solid rgba(14,165,233,0.22)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       flexShrink: 0,
                     }}
                   >
-                    <DataObjectRoundedIcon
+                    <CloudDownloadRoundedIcon
                       sx={{
                         fontSize: "1.1rem",
-                        color: "#F59E0B",
+                        color: "#0EA5E9",
                         display: "block",
                       }}
                     />
@@ -541,30 +569,40 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                         lineHeight: 1.4,
                       }}
                     >
-                      Metadata, notes &amp; tags
+                      Full HUD session from the API: transcript, prompts, tags, events.
                     </Typography>
                   </Box>
-                  <DownloadRoundedIcon
-                    sx={{
-                      fontSize: "1rem",
-                      color: "text.disabled",
-                      flexShrink: 0,
-                    }}
-                  />
+                  {serverExporting === "json" ? (
+                    <CircularProgress size={18} sx={{ flexShrink: 0 }} />
+                  ) : (
+                    <CloudDownloadRoundedIcon
+                      sx={{
+                        fontSize: "1rem",
+                        color: "text.disabled",
+                        flexShrink: 0,
+                      }}
+                    />
+                  )}
                 </Box>
                 <Box
-                  onClick={handleDownloadCSV}
+                  onClick={() => {
+                    if (serverExporting) return;
+                    void downloadServerExport("csv");
+                  }}
                   sx={{
                     display: "flex",
                     alignItems: "center",
                     gap: 1.5,
                     px: 1.75,
                     py: 1.375,
-                    cursor: "pointer",
+                    cursor: serverExporting ? "default" : "pointer",
                     userSelect: "none",
+                    borderTop: "1px solid",
+                    borderColor: "divider",
                     transition: "background 140ms ease",
-                    "&:hover": { bgcolor: "rgba(139,92,246,0.05)" },
-                    "&:active": { bgcolor: "rgba(139,92,246,0.10)" },
+                    opacity: serverExporting && serverExporting !== "csv" ? 0.5 : 1,
+                    "&:hover": { bgcolor: serverExporting ? undefined : "rgba(20,184,166,0.05)" },
+                    "&:active": { bgcolor: serverExporting ? undefined : "rgba(20,184,166,0.10)" },
                   }}
                 >
                   <Box
@@ -572,18 +610,18 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                       width: 36,
                       height: 36,
                       borderRadius: "9px",
-                      bgcolor: "rgba(139,92,246,0.10)",
-                      border: "1px solid rgba(139,92,246,0.22)",
+                      bgcolor: "rgba(20,184,166,0.10)",
+                      border: "1px solid rgba(20,184,166,0.22)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       flexShrink: 0,
                     }}
                   >
-                    <GridOnRoundedIcon
+                    <CloudDownloadRoundedIcon
                       sx={{
                         fontSize: "1.1rem",
-                        color: "#8B5CF6",
+                        color: "#14B8A6",
                         display: "block",
                       }}
                     />
@@ -606,21 +644,91 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                         lineHeight: 1.4,
                       }}
                     >
-                      Notes spreadsheet export
+                      Same session as CSV for spreadsheets (transcript, prompts, tags).
                     </Typography>
                   </Box>
-                  <DownloadRoundedIcon
-                    sx={{
-                      fontSize: "1rem",
-                      color: "text.disabled",
-                      flexShrink: 0,
-                    }}
-                  />
+                  {serverExporting === "csv" ? (
+                    <CircularProgress size={18} sx={{ flexShrink: 0 }} />
+                  ) : (
+                    <CloudDownloadRoundedIcon
+                      sx={{
+                        fontSize: "1rem",
+                        color: "text.disabled",
+                        flexShrink: 0,
+                      }}
+                    />
+                  )}
                 </Box>
               </Box>
             </Box>
 
             <Divider />
+
+            {typeof window !== "undefined" && window.api?.listDisplaySources ? (
+              <Box>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.75,
+                    mb: 1.5,
+                  }}
+                >
+                  <DesktopWindowsRoundedIcon
+                    sx={{ fontSize: "0.875rem", color: "text.disabled" }}
+                  />
+                  <Typography
+                    sx={{
+                      fontSize: "0.625rem",
+                      fontWeight: 700,
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
+                      color: "text.disabled",
+                    }}
+                  >
+                    System audio capture
+                  </Typography>
+                </Box>
+                <Stack spacing={1.25}>
+                  <Typography sx={{ fontSize: "0.75rem", color: "text.secondary", lineHeight: 1.45 }}>
+                    Choose which screen or window Electron prefers when you start system-audio capture. You still
+                    confirm in the OS picker; this sets the default video source (with loopback audio).
+                  </Typography>
+                  <Typography sx={{ fontSize: "0.7rem", color: "text.disabled", lineHeight: 1.45 }}>
+                    Windows 11: Settings → System → Sound → allow app access. macOS Sequoia: System Settings → Privacy
+                    and Security → Screen Recording and Microphone for Pulse HUD.
+                  </Typography>
+                  {displaySourcesError ? (
+                    <Alert severity="warning">{displaySourcesError}</Alert>
+                  ) : null}
+                  <FormControl fullWidth size="small" disabled={displaySourcesLoading}>
+                    <InputLabel id="pulse-display-source-label">Preferred source</InputLabel>
+                    <Select
+                      labelId="pulse-display-source-label"
+                      label="Preferred source"
+                      value={displaySourceId}
+                      onChange={(e) => setDisplaySourceId(String(e.target.value))}
+                    >
+                      {displaySources.map((s) => (
+                        <MenuItem key={s.id} value={s.id}>
+                          {s.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    disabled={!displaySourceId || displaySourcesLoading}
+                    onClick={() => window.api?.setDisplayCaptureSource?.(displaySourceId || null)}
+                  >
+                    Save preference
+                  </Button>
+                </Stack>
+              </Box>
+            ) : null}
+
+            {typeof window !== "undefined" && window.api?.listDisplaySources ? <Divider /> : null}
 
             <Box>
               <Box

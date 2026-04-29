@@ -83,6 +83,8 @@ Output goes to `dist/`. Preview the production build locally:
 npm run preview
 ```
 
+For **PWA install** testing, prefer `npm run build && npm run preview` (the dev server often skips or differs from production PWA behavior).
+
 ---
 
 ## Deployment

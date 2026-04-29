@@ -7,6 +7,7 @@ import RuleRoundedIcon from "@mui/icons-material/RuleRounded";
 import CheckRoundedIcon from "@mui/icons-material/CheckRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import HeadphonesIcon from "@mui/icons-material/Headphones";
+import MicNoneOutlinedIcon from "@mui/icons-material/MicNoneOutlined";
 import type { TranscriptItem } from "@/modules/transcript/types";
 import type { PromptSuggestion } from "@/modules/prompts/types";
 import {
@@ -14,10 +15,16 @@ import {
   type FloatingHudTokens,
 } from "@/app/providers/theme";
 import { formatClock } from "@/shared/utils/formatters";
+import {
+  intervieweeUiLabel,
+  interviewerSideUiLabel,
+  isIntervieweeSpeaker,
+} from "@/modules/transcript/utils/interviewRoles";
 
-const SYSTEM_TEAL = "#26C6DA";
+const INTERVIEWEE_TEAL = "#26C6DA";
+const AI_VIOLET = "#A78BFA";
+const AI_GLOW = "rgba(167, 139, 250, 0.22)";
 
-// Stable module-level keyframes — prevents animation restart on re-render
 const kfBubbleLeft = keyframes`
   from { opacity: 0; transform: translateX(-10px); }
   to   { opacity: 1; transform: translateX(0);     }
@@ -62,10 +69,9 @@ export interface PendingMsg {
 
 export type TimelineRow =
   | { kind: "transcript"; id: string; item: TranscriptItem }
-  | { kind: "accepted";   id: string; msg: AcceptedMsg    }
-  | { kind: "pending";    id: string; msg: PendingMsg     };
+  | { kind: "accepted"; id: string; msg: AcceptedMsg }
+  | { kind: "pending"; id: string; msg: PendingMsg };
 
-// ─── Typing dots ────────────────────────────────────────────────────────────
 
 const TypingDots = memo(function TypingDots({ color }: { color: string }) {
   return (
@@ -87,7 +93,6 @@ const TypingDots = memo(function TypingDots({ color }: { color: string }) {
   );
 });
 
-// ─── Suggestion card ─────────────────────────────────────────────────────────
 
 const SuggestionCard = memo(function SuggestionCard({
   prompt,
@@ -96,7 +101,7 @@ const SuggestionCard = memo(function SuggestionCard({
   onReject,
   hud,
   theme,
-  isSystemAudio,
+  anchoredToIntervieweeMic,
 }: {
   prompt: PromptSuggestion;
   isRejecting: boolean;
@@ -104,11 +109,11 @@ const SuggestionCard = memo(function SuggestionCard({
   onReject: (id: string) => void;
   hud: FloatingHudTokens;
   theme: Theme;
-  isSystemAudio: boolean;
+  anchoredToIntervieweeMic: boolean;
 }) {
   const isModel = (prompt.suggestionOrigin ?? "local") === "model";
   const timeLabel = prompt.transcriptTimeLabel ?? formatClock(prompt.timestamp);
-  const accent = isSystemAudio ? SYSTEM_TEAL : hud.accentMain;
+  const accent = isModel ? AI_VIOLET : anchoredToIntervieweeMic ? INTERVIEWEE_TEAL : hud.accentMain;
   const aa = (a: number) => alpha(accent, a);
 
   return (
@@ -121,44 +126,66 @@ const SuggestionCard = memo(function SuggestionCard({
           ? `${kfCardOut} 200ms ease both`
           : `${kfCardIn} 240ms cubic-bezier(0.16,1,0.3,1) both`,
         borderRadius: "12px",
-        border: `1px solid ${isModel ? aa(0.35) : hud.border}`,
-        bgcolor: isModel ? aa(0.07) : hud.card,
+        border: isModel
+          ? `1px solid ${alpha(AI_VIOLET, 0.45)}`
+          : `1px solid ${hud.border}`,
+        ...(isModel
+          ? {
+            background: `linear-gradient(145deg, ${alpha(AI_VIOLET, 0.14)} 0%, ${alpha(theme.palette.common.black, 0.28)} 52%, ${hud.card} 100%)`,
+          }
+          : { bgcolor: hud.card }),
         boxShadow: isModel
-          ? `0 0 0 1px ${aa(0.1)}, 0 4px 16px ${alpha(theme.palette.common.black, 0.14)}`
+          ? `0 0 24px ${AI_GLOW}, 0 4px 18px ${alpha(theme.palette.common.black, 0.2)}`
           : `0 2px 8px ${alpha(theme.palette.common.black, 0.1)}`,
         overflow: "hidden",
         position: "relative",
         transition: "border-color 180ms ease, box-shadow 180ms ease, opacity 180ms ease",
         willChange: "transform, opacity",
         "&:hover": {
-          borderColor: isModel ? aa(0.55) : hud.borderStrong,
+          borderColor: isModel ? alpha(AI_VIOLET, 0.65) : hud.borderStrong,
           boxShadow: isModel
-            ? `0 0 0 1px ${aa(0.2)}, 0 6px 20px ${alpha(theme.palette.common.black, 0.18)}`
+            ? `0 0 28px ${alpha(AI_VIOLET, 0.35)}, 0 6px 22px ${alpha(theme.palette.common.black, 0.22)}`
             : `0 4px 14px ${alpha(theme.palette.common.black, 0.14)}`,
         },
       }}
     >
-      {/* left accent bar */}
+      {isModel ? (
+        <Box
+          aria-hidden
+          sx={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            background: `radial-gradient(120% 80% at 0% 0%, ${alpha(AI_VIOLET, 0.16)} 0%, transparent 55%)`,
+          }}
+        />
+      ) : null}
       <Box sx={{
-        position: "absolute", left: 0, top: 8, bottom: 8, width: 3,
+        position: "absolute", left: 0, top: 5, bottom: 5, width: 3,
         borderRadius: "0 3px 3px 0",
-        bgcolor: isModel ? accent : alpha(theme.palette.common.white, 0.15),
+        bgcolor: isModel ? AI_VIOLET : alpha(theme.palette.common.white, 0.15),
       }} />
 
-      <Stack sx={{ p: 1.5, pl: 2.25, gap: 0.75, width: "100%", minWidth: 0, boxSizing: "border-box" }}>
-        <Stack sx={{ flexDirection: "row", alignItems: "center", gap: 0.75, flexWrap: "wrap", width: "100%", minWidth: 0 }}>
-          <Box sx={{ color: isModel ? accent : hud.mid, display: "flex", alignItems: "center" }}>
-            {isSystemAudio
-              ? <HeadphonesIcon sx={{ fontSize: 13 }} />
-              : isModel
-              ? <AutoAwesomeRoundedIcon sx={{ fontSize: 13 }} />
-              : <RuleRoundedIcon sx={{ fontSize: 13 }} />}
+      <Stack sx={{ p: 1.1, pl: 1.85, gap: 0.45, width: "100%", minWidth: 0, boxSizing: "border-box", position: "relative" }}>
+        <Stack sx={{ flexDirection: "row", alignItems: "center", gap: 0.5, flexWrap: "wrap", width: "100%", minWidth: 0 }}>
+          <Box sx={{ color: isModel ? AI_VIOLET : anchoredToIntervieweeMic ? INTERVIEWEE_TEAL : hud.mid, display: "flex", alignItems: "center" }}>
+            {isModel ? (
+              <AutoAwesomeRoundedIcon sx={{ fontSize: 13 }} />
+            ) : anchoredToIntervieweeMic ? (
+              <MicNoneOutlinedIcon sx={{ fontSize: 13 }} />
+            ) : (
+              <RuleRoundedIcon sx={{ fontSize: 13 }} />
+            )}
           </Box>
           <Typography variant="caption" sx={{
             fontSize: "0.625rem", letterSpacing: "0.07em", textTransform: "uppercase",
-            color: isModel ? aa(0.85) : hud.low, fontWeight: 600,
+            color: isModel ? alpha(AI_VIOLET, 0.95) : hud.low, fontWeight: 600,
           }}>
-            {isSystemAudio ? "System audio" : isModel ? "AI suggestion" : "Rule suggestion"}
+            {isModel
+              ? "AI · interviewer vs you"
+              : anchoredToIntervieweeMic
+                ? "After your mic"
+                : "Offline pattern"}
           </Typography>
           <Typography variant="caption" sx={{ fontSize: "0.625rem", color: hud.faint, ml: "auto", fontVariantNumeric: "tabular-nums" }}>
             {timeLabel}
@@ -166,7 +193,7 @@ const SuggestionCard = memo(function SuggestionCard({
         </Stack>
 
         <Typography variant="subtitle2" sx={{
-          fontSize: "0.8125rem", fontWeight: 600, lineHeight: 1.35, color: hud.hi,
+          fontSize: "0.78rem", fontWeight: 600, lineHeight: 1.28, color: hud.hi,
           letterSpacing: "-0.01em", display: "-webkit-box", WebkitLineClamp: 2,
           WebkitBoxOrient: "vertical", overflow: "hidden", overflowWrap: "anywhere",
         }}>
@@ -183,45 +210,74 @@ const SuggestionCard = memo(function SuggestionCard({
           </Typography>
         ) : null}
 
-        <Stack sx={{ flexDirection: "row", gap: 0.75, mt: 0.25 }}>
-          <Box component="button" type="button" onClick={() => onAccept(prompt)} aria-label="Accept suggestion"
+        <Stack
+          sx={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            gap: 0.35,
+            mt: 0.125,
+          }}
+        >
+          <Box
+            component="button"
+            type="button"
+            onClick={() => onAccept(prompt)}
+            aria-label="Accept suggestion"
             sx={{
-              flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-              gap: 0.5, height: 28, borderRadius: "8px",
-              border: `1px solid ${aa(0.4)}`, bgcolor: aa(0.12),
-              color: isSystemAudio ? SYSTEM_TEAL : hud.accent,
-              cursor: "pointer", fontSize: "0.75rem", fontWeight: 600,
-              transition: "background-color 140ms ease, border-color 140ms ease, transform 140ms ease",
-              "&:hover": { bgcolor: aa(0.24), borderColor: aa(0.6), transform: "translateY(-1px)" },
-              "&:active": { transform: "scale(0.97)" },
-            }}
-          >
-            <CheckRoundedIcon sx={{ fontSize: 13 }} />
-            Accept
-          </Box>
-          <Box component="button" type="button" onClick={() => onReject(prompt.id)} aria-label="Dismiss suggestion"
-            sx={{
-              display: "flex", alignItems: "center", justifyContent: "center",
-              width: 28, height: 28, borderRadius: "8px",
-              border: `1px solid ${hud.border}`, bgcolor: "transparent", color: hud.low,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 22,
+              height: 22,
+              p: 0,
+              minWidth: 22,
+              borderRadius: "6px",
+              border: `1px solid ${aa(0.28)}`,
+              bgcolor: "transparent",
+              color: anchoredToIntervieweeMic ? INTERVIEWEE_TEAL : isModel ? AI_VIOLET : hud.accent,
               cursor: "pointer",
-              transition: "background-color 140ms ease, border-color 140ms ease, color 140ms ease",
-              "&:hover": {
-                bgcolor: alpha(theme.palette.error.main, 0.12),
-                borderColor: alpha(theme.palette.error.main, 0.3),
-                color: theme.palette.error.light,
-              },
+              transition: "background-color 120ms ease, border-color 120ms ease, opacity 120ms ease",
+              "&:hover": { bgcolor: aa(0.1), borderColor: aa(0.45) },
+              "&:active": { opacity: 0.75 },
             }}
           >
-            <CloseRoundedIcon sx={{ fontSize: 13 }} />
+            <CheckRoundedIcon sx={{ fontSize: 14 }} />
+          </Box>
+          <Box
+            component="button"
+            type="button"
+            onClick={() => onReject(prompt.id)}
+            aria-label="Delete suggestion"
+            sx={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 22,
+              height: 22,
+              p: 0,
+              minWidth: 22,
+              borderRadius: "6px",
+              border: `1px solid ${alpha(theme.palette.common.white, 0.1)}`,
+              bgcolor: "transparent",
+              color: hud.faint,
+              cursor: "pointer",
+              transition: "background-color 120ms ease, border-color 120ms ease, color 120ms ease",
+              "&:hover": {
+                bgcolor: alpha(theme.palette.error.main, 0.1),
+                borderColor: alpha(theme.palette.error.main, 0.28),
+                color: alpha(theme.palette.error.light, 0.95),
+              },
+              "&:active": { opacity: 0.75 },
+            }}
+          >
+            <CloseRoundedIcon sx={{ fontSize: 14 }} />
           </Box>
         </Stack>
       </Stack>
     </Box>
   );
 });
-
-// ─── Transcript bubble ────────────────────────────────────────────────────────
 
 const TranscriptBubble = memo(function TranscriptBubble({
   item, isMe, hud, theme,
@@ -232,28 +288,32 @@ const TranscriptBubble = memo(function TranscriptBubble({
   theme: Theme;
 }) {
   const speakerNorm = String(item.speakerId ?? "").trim().toLowerCase();
-  const isSystem = speakerNorm === "system";
+  const isGuest = isIntervieweeSpeaker(item.speakerId);
   const isPartial = item.text === "…";
 
-  const bubbleBg    = isMe     ? alpha(theme.palette.primary.main, 0.8)
-                    : isSystem ? alpha(SYSTEM_TEAL, 0.1)
-                    :            alpha(theme.palette.common.white, 0.06);
-  const bubbleBorder = isMe     ? alpha(theme.palette.primary.main, 0.4)
-                     : isSystem ? alpha(SYSTEM_TEAL, 0.4)
-                     :            hud.border;
-  const bubbleShadow = isMe     ? `0 2px 10px ${alpha(theme.palette.primary.main, 0.18)}`
-                     : isSystem ? `0 2px 10px ${alpha(SYSTEM_TEAL, 0.12)}`
-                     :            `0 1px 3px ${alpha(theme.palette.common.black, 0.1)}`;
-  const metaColor   = isMe     ? alpha(theme.palette.common.white, 0.6)
-                    : isSystem ? alpha(SYSTEM_TEAL, 0.85)
-                    :            hud.faint;
-  const timeColor   = isMe     ? alpha(theme.palette.common.white, 0.4)
-                    : isSystem ? alpha(SYSTEM_TEAL, 0.5)
-                    :            hud.faint;
-  const textColor   = isMe     ? alpha(theme.palette.common.white, 0.96) : hud.hi;
+  const bubbleBg = isMe ? alpha(theme.palette.primary.main, 0.8)
+    : isGuest ? alpha(INTERVIEWEE_TEAL, 0.1)
+      : alpha(theme.palette.common.white, 0.06);
+  const bubbleBorder = isMe ? alpha(theme.palette.primary.main, 0.4)
+    : isGuest ? alpha(INTERVIEWEE_TEAL, 0.4)
+      : hud.border;
+  const bubbleShadow = isMe ? `0 2px 10px ${alpha(theme.palette.primary.main, 0.18)}`
+    : isGuest ? `0 2px 10px ${alpha(INTERVIEWEE_TEAL, 0.12)}`
+      : `0 1px 3px ${alpha(theme.palette.common.black, 0.1)}`;
+  const metaColor = isMe ? alpha(theme.palette.common.white, 0.6)
+    : isGuest ? alpha(INTERVIEWEE_TEAL, 0.85)
+      : hud.faint;
+  const timeColor = isMe ? alpha(theme.palette.common.white, 0.4)
+    : isGuest ? alpha(INTERVIEWEE_TEAL, 0.5)
+      : hud.faint;
+  const textColor = isMe ? alpha(theme.palette.common.white, 0.96) : hud.hi;
   const bubbleRadius = isMe ? "14px 14px 4px 14px" : "14px 14px 14px 4px";
-  const speakerLabel = isMe ? "You" : isSystem ? "System Audio" : speakerNorm || "Speaker";
-  const dotColor    = isMe ? alpha(theme.palette.common.white, 0.6) : isSystem ? SYSTEM_TEAL : hud.mid;
+  const speakerLabel = isMe
+    ? "You"
+    : isGuest
+      ? intervieweeUiLabel(item.speakerId)
+      : interviewerSideUiLabel(item.speakerId);
+  const dotColor = isMe ? alpha(theme.palette.common.white, 0.6) : isGuest ? INTERVIEWEE_TEAL : hud.mid;
 
   return (
     <Stack
@@ -278,7 +338,7 @@ const TranscriptBubble = memo(function TranscriptBubble({
         }}
       >
         <Stack sx={{ flexDirection: "row", alignItems: "center", gap: 0.5, mb: isPartial ? 0 : 0.4, justifyContent: isMe ? "flex-end" : "flex-start" }}>
-          {isSystem && !isPartial && <HeadphonesIcon sx={{ fontSize: 10, color: metaColor }} />}
+          {speakerNorm === "system" && !isPartial && <HeadphonesIcon sx={{ fontSize: 10, color: metaColor }} />}
           {!isPartial && (
             <>
               <Typography variant="caption" sx={{ fontSize: "0.6rem", color: metaColor, fontWeight: 600, textTransform: "capitalize" }}>
@@ -305,8 +365,6 @@ const TranscriptBubble = memo(function TranscriptBubble({
     </Stack>
   );
 });
-
-// ─── Accepted message bubble ──────────────────────────────────────────────────
 
 const AcceptedMessageBubble = memo(function AcceptedMessageBubble({
   msg, hud, theme,
@@ -349,15 +407,12 @@ const AcceptedMessageBubble = memo(function AcceptedMessageBubble({
   );
 });
 
-// ─── Main tab ────────────────────────────────────────────────────────────────
-
 export interface HudSuggestionsTabProps {
   scrollRef: RefObject<HTMLDivElement | null>;
   mergedConversationTimeline: TimelineRow[];
   latestMessageSuggestions: PromptSuggestion[];
   suggestionsLoading: boolean;
   rejectingIds: Set<string>;
-  timelineCurrentSpeaker: string;
   onPromptAccept: (prompt: PromptSuggestion) => void;
   onPromptReject: (id: string) => void;
 }
@@ -368,17 +423,16 @@ export function HudSuggestionsTab({
   latestMessageSuggestions,
   suggestionsLoading,
   rejectingIds,
-  timelineCurrentSpeaker,
   onPromptAccept,
   onPromptReject,
 }: HudSuggestionsTabProps) {
   const theme = useTheme();
   const hud = useMemo(() => getFloatingHudTokens(theme), [theme]);
 
-  const systemAudioIds = useMemo(() => {
+  const intervieweeLineIds = useMemo(() => {
     const ids = new Set<string>();
     for (const row of mergedConversationTimeline) {
-      if (row.kind === "transcript" && String(row.item.speakerId ?? "").trim().toLowerCase() === "system") {
+      if (row.kind === "transcript" && isIntervieweeSpeaker(row.item.speakerId)) {
         ids.add(row.item.id);
       }
     }
@@ -409,9 +463,9 @@ export function HudSuggestionsTab({
           display: "flex", flexDirection: "column", alignItems: "center",
           justifyContent: "center", height: "100%", gap: 1.25, py: 4,
         }}>
-          <AutoAwesomeRoundedIcon sx={{ fontSize: 26, color: hud.faint }} />
+          <AutoAwesomeRoundedIcon sx={{ fontSize: 26, color: alpha(AI_VIOLET, 0.65) }} />
           <Typography variant="body2" sx={{ color: hud.faint, fontSize: "0.8rem", textAlign: "center", lineHeight: 1.55, maxWidth: "78%" }}>
-            Suggestions appear as patterns show up in the feed.
+            Prep tips refresh when you speak on the mic. Call audio adds context from the conversation; suggestions help you tighten answers and stay ready for what might come next.
           </Typography>
         </Box>
       ) : (
@@ -431,9 +485,8 @@ export function HudSuggestionsTab({
               return <TranscriptBubble key={entry.id} item={pendingItem} isMe hud={hud} theme={theme} />;
             }
             const item = entry.item;
-            const speakerNorm = String(item.speakerId ?? "").trim().toLowerCase();
-            const isMe = speakerNorm !== "system" &&
-              (speakerNorm === timelineCurrentSpeaker || speakerNorm === "me" || speakerNorm === "self");
+            // Interviewee ids (mic / you) share one lane — align right; interviewer/system left.
+            const isMe = isIntervieweeSpeaker(item.speakerId);
             return <TranscriptBubble key={entry.id} item={item} isMe={isMe} hud={hud} theme={theme} />;
           })}
 
@@ -445,14 +498,14 @@ export function HudSuggestionsTab({
                   color: hud.faint, letterSpacing: "0.06em",
                   textTransform: "uppercase", fontWeight: 600, fontSize: "0.6rem",
                 }}>
-                  Suggestions
+                  AI & feed
                 </Typography>
                 <Box sx={{ flex: 1, height: "1px", bgcolor: alpha(theme.palette.common.white, 0.07) }} />
               </Stack>
               {latestMessageSuggestions.map((prompt) => {
-                const isSystemAudio =
-                  systemAudioIds.size > 0 &&
-                  (prompt.transcriptIds ?? []).some((id) => systemAudioIds.has(id));
+                const anchoredToInterviewee =
+                  intervieweeLineIds.size > 0 &&
+                  (prompt.transcriptIds ?? []).some((id) => intervieweeLineIds.has(id));
                 return (
                   <SuggestionCard
                     key={`prompt-${prompt.id}`}
@@ -462,7 +515,7 @@ export function HudSuggestionsTab({
                     onReject={onPromptReject}
                     hud={hud}
                     theme={theme}
-                    isSystemAudio={isSystemAudio}
+                    anchoredToIntervieweeMic={anchoredToInterviewee}
                   />
                 );
               })}
@@ -474,13 +527,14 @@ export function HudSuggestionsTab({
               <Box sx={{
                 px: 1.5, py: 0.75,
                 borderRadius: "14px 14px 14px 4px",
-                border: `1px solid ${hud.border}`,
-                bgcolor: alpha(theme.palette.common.white, 0.04),
+                border: `1px solid ${alpha(AI_VIOLET, 0.38)}`,
+                bgcolor: alpha(AI_VIOLET, 0.1),
+                boxShadow: `0 0 20px ${alpha(AI_VIOLET, 0.12)}`,
               }}>
-                <TypingDots color={hud.mid} />
+                <TypingDots color={alpha(AI_VIOLET, 0.85)} />
               </Box>
               <Typography variant="caption" sx={{ color: hud.faint, mt: 0.5, ml: 0.25, fontSize: "0.6rem" }}>
-                Generating suggestions…
+                Generating AI follow-ups…
               </Typography>
             </Stack>
           )}

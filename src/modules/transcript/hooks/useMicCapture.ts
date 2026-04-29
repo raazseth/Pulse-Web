@@ -4,10 +4,10 @@ import { fetchWithAuth } from "@/shared/utils/fetchWithAuth";
 
 interface UseMicCaptureOptions {
   onChunk: (text: string) => void;
-                                                                                                                    
   onVoiceBackendError?: () => void;
   accessToken?: string | null;
   refreshAccessToken?: () => Promise<string | null>;
+  transcribeSessionId?: string | null;
   lang?: string;
   chunkIntervalMs?: number;
 }
@@ -36,6 +36,7 @@ export function useMicCapture({
   onVoiceBackendError,
   accessToken,
   refreshAccessToken,
+  transcribeSessionId = null,
   lang = "en-US",
   chunkIntervalMs = 3000,
 }: UseMicCaptureOptions) {
@@ -62,10 +63,14 @@ export function useMicCapture({
   const refreshAccessTokenRef = useRef(refreshAccessToken);
   useEffect(() => { refreshAccessTokenRef.current = refreshAccessToken; });
 
+  const transcribeSessionIdRef = useRef(transcribeSessionId ?? null);
+  useEffect(() => {
+    transcribeSessionIdRef.current = transcribeSessionId ?? null;
+  });
+
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const activeRequestsRef = useRef<Set<AbortController>>(new Set());
-                                                                                                                 
   const captureSessionRef = useRef(0);
 
   const stop = useCallback(() => {
@@ -88,7 +93,7 @@ export function useMicCapture({
       return;
     }
 
-    const sessionBeforeMedia = captureSessionRef.current; 
+    const sessionBeforeMedia = captureSessionRef.current;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -116,7 +121,11 @@ export function useMicCapture({
         const controller = new AbortController();
         activeRequestsRef.current.add(controller);
 
-        const transcribeUrl = `${getAudioTranscribeUrl()}?lang=${encodeURIComponent(lang)}`;
+        const qs = new URLSearchParams({ lang });
+        const sid = transcribeSessionIdRef.current?.trim();
+        if (sid) qs.set("sessionId", sid);
+        if (event.data.type) qs.set("mime", event.data.type);
+        const transcribeUrl = `${getAudioTranscribeUrl()}?${qs.toString()}`;
         try {
           const res = await fetchWithAuth(
             transcribeUrl,

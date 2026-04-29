@@ -1,4 +1,4 @@
-import { ChangeEvent } from "react";
+import { ChangeEvent, KeyboardEvent } from "react";
 import {
   alpha,
   Box,
@@ -30,6 +30,7 @@ interface ContextPanelProps {
   onNoteAdd?: () => void;
   onNoteDelete?: (noteId: string) => void;
   onNoteSave?: (note: SessionNote) => void;
+  onNoteCommit?: (note: SessionNote) => void;
   onNoteTagAdd?: (noteId: string, tagId: string) => void;
   onNoteTagRemove?: (noteId: string, tagId: string) => void;
 }
@@ -44,6 +45,7 @@ export function ContextPanel({
   onNoteAdd,
   onNoteDelete,
   onNoteSave,
+  onNoteCommit,
   onNoteTagAdd,
   onNoteTagRemove,
 }: ContextPanelProps) {
@@ -67,6 +69,7 @@ export function ContextPanel({
     noteId: string,
     event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
+    if (notes.some((n) => n.id === noteId && n.editorLocked)) return;
     const body = event.target.value;
     const updated = notes.map((note) =>
       note.id === noteId ? { ...note, body } : note,
@@ -77,11 +80,27 @@ export function ContextPanel({
   };
 
   const handleTagToggle = (noteId: string, tagId: string, currentlyLinked: boolean) => {
+    if (notes.some((n) => n.id === noteId && n.editorLocked)) return;
     if (currentlyLinked) {
       onNoteTagRemove?.(noteId, tagId);
     } else {
       onNoteTagAdd?.(noteId, tagId);
     }
+  };
+
+  const handleNoteKeyDown = (note: SessionNote, e: KeyboardEvent<HTMLDivElement>) => {
+    if (note.editorLocked) return;
+    if (e.key !== "Enter" || e.shiftKey) return;
+    if (e.nativeEvent.isComposing) return;
+    if (!onNoteCommit) return;
+    e.preventDefault();
+    const body = String(note.body ?? "");
+    onNoteCommit({ ...note, body });
+    onNotesChange(
+      notes.map((n) =>
+        n.id === note.id ? { ...n, body, editorLocked: true, isDraft: false } : n,
+      ),
+    );
   };
 
   const uniqueTagOptions = availableTags.filter((opt) =>
@@ -101,7 +120,7 @@ export function ContextPanel({
         <SectionHeader
           eyebrow="Context"
           title="Session framing"
-          subtitle="Title and study fields sync to the server. Notes autosave; link a note to transcript tags you have already captured."
+          subtitle="Title and study fields sync to the server. Session notes autosave while typing; press Enter to save immediately and lock the body (Shift+Enter adds a line). Only one new note from + can be open at a time until you save or delete it — then you can add more. Link notes to transcript tags you have already captured."
         />
 
         <Box sx={wellSx}>
@@ -186,10 +205,23 @@ export function ContextPanel({
               Notes
             </Typography>
             {onNoteAdd ? (
-              <Tooltip title="Add note">
-                <IconButton size="small" onClick={onNoteAdd} aria-label="Add note">
-                  <AddIcon sx={{ fontSize: 20 }} />
-                </IconButton>
+              <Tooltip
+                title={
+                  notes.some((n) => n.isDraft)
+                    ? "Finish the note you started (Enter to save) or delete it before adding another."
+                    : "Add session note"
+                }
+              >
+                <span>
+                  <IconButton
+                    size="small"
+                    onClick={onNoteAdd}
+                    disabled={notes.some((n) => n.isDraft)}
+                    aria-label="Add note"
+                  >
+                    <AddIcon sx={{ fontSize: 20 }} />
+                  </IconButton>
+                </span>
               </Tooltip>
             ) : null}
           </Stack>
@@ -258,11 +290,13 @@ export function ContextPanel({
                     minRows={2}
                     value={note.body}
                     onChange={(e) => handleNoteChange(note.id, e)}
+                    onKeyDown={(e) => handleNoteKeyDown(note, e)}
                     variant="standard"
                     placeholder="Write context, hypotheses, or follow-ups…"
                     slotProps={{
                       input: {
                         disableUnderline: true,
+                        readOnly: Boolean(note.editorLocked),
                       },
                     }}
                     sx={{
@@ -270,9 +304,19 @@ export function ContextPanel({
                         fontSize: "0.875rem",
                         lineHeight: 1.6,
                         py: 0.5,
+                        ...(note.editorLocked ? { cursor: "default" } : {}),
                       },
                     }}
                   />
+                  {!note.editorLocked && onNoteCommit ? (
+                    <Typography variant="caption" color="text.disabled" sx={{ display: "block", mt: 0.75, fontWeight: 500 }}>
+                      Enter — save and lock · Shift+Enter — new line
+                    </Typography>
+                  ) : note.editorLocked ? (
+                    <Typography variant="caption" color="text.disabled" sx={{ display: "block", mt: 0.75, fontWeight: 500 }}>
+                      Saved and locked. Delete this note to edit again.
+                    </Typography>
+                  ) : null}
 
                   {uniqueTagOptions.length > 0 && (onNoteTagAdd || onNoteTagRemove) ? (
                     <Stack sx={{ mt: 1.25, gap: 0.5 }}>
@@ -292,11 +336,12 @@ export function ContextPanel({
                               color={opt.color}
                               variant={isLinked ? "filled" : "outlined"}
                               onClick={() => handleTagToggle(note.id, matchingTag.id, isLinked)}
+                              disabled={Boolean(note.editorLocked)}
                               sx={{
                                 height: 24,
                                 fontSize: "0.7rem",
                                 fontWeight: 600,
-                                cursor: "pointer",
+                                cursor: note.editorLocked ? "default" : "pointer",
                                 ...(isLinked
                                   ? {}
                                   : tagChipOutlinedRestSx(theme, opt.color)),
@@ -317,7 +362,7 @@ export function ContextPanel({
                 color="text.secondary"
                 sx={{ textAlign: "center", py: 2, lineHeight: 1.55 }}
               >
-                No notes yet. Add one to keep hypotheses and framing next to the transcript.
+                No notes yet. Add session notes for hypotheses and framing; only one new note can be open at a time until you save with Enter.
               </Typography>
             ) : null}
           </Stack>

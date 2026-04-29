@@ -7,10 +7,13 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useOptionalAuth } from "@/modules/auth/hooks/useAuthStore";
 import { defaultTagOptions } from "@/modules/tagging/services/taggingStorage";
 import { TagOption, TranscriptTag } from "@/modules/tagging/types";
 import { SessionSnapshot } from "@/shared/types/session";
 import { SessionMetadata, SessionNote, SessionStatus, SessionStoreState } from "@/modules/context/types";
+import type { HudApiFullSnapshot } from "@/modules/context/types/hudApiSnapshot";
+import { mapServerHudTagToTranscriptTag } from "@/modules/context/utils/mapServerHudTag";
 
 interface SessionStoreValue extends SessionStoreState {
   availableTags: TagOption[];
@@ -25,64 +28,78 @@ interface SessionStoreValue extends SessionStoreState {
   addNote: (note: SessionNote) => void;
   removeNote: (noteId: string) => void;
   updateNoteTags: (noteId: string, tagId: string, linked: boolean) => void;
+  applyServerHudSnapshot: (snap: HudApiFullSnapshot) => void;
 }
 
 const SESSION_STORAGE_KEY = "pulse-hud-session";
+const LAST_SESSION_STORAGE_KEY = "pulse-hud-last-session";
 
-const defaultState: SessionStoreState = {
-  sessionId: crypto.randomUUID(),
-  sessionStatus: "active",
-  metadata: {
-    title: "Foundations Study Session",
-    facilitator: "Host Team",
-    audience: "Core cohort",
-    role: "",
-  },
-  notes: [
-    { id: "note-1", label: "Study goals", body: "What are the key research questions for this session?" },
-    { id: "note-2", label: "Interview structure", body: "Warm-up → Core topics → Follow-up → Wrap." },
-    { id: "note-3", label: "Past notes", body: "Add recurring themes or prior findings here." },
-  ],
-  tags: [],
-  focusedTagId: defaultTagOptions[0].id,
-};
+function userStorageKey(userId?: string) {
+  return userId ? `${SESSION_STORAGE_KEY}:${userId}` : SESSION_STORAGE_KEY;
+}
+
+export function lastSessionStorageKey(userId: string) {
+  return `${LAST_SESSION_STORAGE_KEY}:${userId}`;
+}
+
+function createDefaultState(): SessionStoreState {
+  return {
+    sessionId: "",
+    sessionStatus: "active",
+    metadata: {
+      title: "Untitled Session",
+      facilitator: "",
+      audience: "",
+      role: "",
+    },
+    notes: [],
+    tags: [],
+    focusedTagId: defaultTagOptions[0].id,
+  };
+}
 
 const SessionStoreContext = createContext<SessionStoreValue | null>(null);
 
-function readSnapshot(): SessionStoreState {
-  const rawSnapshot = window.localStorage.getItem(SESSION_STORAGE_KEY);
-  if (!rawSnapshot) return defaultState;
+function readSnapshot(userId?: string): SessionStoreState {
+  const fallback = createDefaultState();
+  const rawSnapshot = window.localStorage.getItem(userStorageKey(userId));
+  if (!rawSnapshot) return fallback;
 
   try {
     const snapshot = JSON.parse(rawSnapshot) as Partial<SessionSnapshot>;
     return {
-      sessionId: snapshot.sessionId ?? defaultState.sessionId,
-      sessionStatus: (snapshot as Partial<SessionStoreState>).sessionStatus ?? defaultState.sessionStatus,
-      metadata: snapshot.metadata ?? defaultState.metadata,
-      notes: snapshot.notes ?? defaultState.notes,
-      tags: snapshot.tags ?? defaultState.tags,
+      sessionId: snapshot.sessionId ?? fallback.sessionId,
+      sessionStatus: (snapshot as Partial<SessionStoreState>).sessionStatus ?? fallback.sessionStatus,
+      metadata: snapshot.metadata ?? fallback.metadata,
+      notes: snapshot.notes ?? fallback.notes,
+      tags: snapshot.tags ?? fallback.tags,
       selectedTranscriptId: snapshot.selectedTranscriptId,
-      focusedTagId: snapshot.focusedTagId ?? defaultState.focusedTagId,
+      focusedTagId: snapshot.focusedTagId ?? fallback.focusedTagId,
     };
   } catch {
-    return defaultState;
+    return fallback;
   }
 }
 
 export function SessionStoreProvider({ children }: PropsWithChildren) {
+  const auth = useOptionalAuth();
+  const user = auth?.user ?? null;
   const [state, setState] = useState<SessionStoreState>(() =>
-    typeof window === "undefined" ? defaultState : readSnapshot(),
+    typeof window === "undefined" ? createDefaultState() : readSnapshot(user?.id),
   );
 
   useEffect(() => {
-    window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(state));
-  }, [state]);
+    setState(readSnapshot(user?.id));
+  }, [user?.id]);
 
-  
-  
-  
-  
-  
+  useEffect(() => {
+    if (!user?.id) return;
+    window.localStorage.setItem(userStorageKey(user.id), JSON.stringify(state));
+    if (state.sessionId) {
+      window.localStorage.setItem(lastSessionStorageKey(user.id), state.sessionId);
+    }
+  }, [state, user?.id]);
+
   const focusTag = useCallback((tagId: string) => {
     setState((s) => ({ ...s, focusedTagId: tagId }));
   }, []);
@@ -143,6 +160,28 @@ export function SessionStoreProvider({ children }: PropsWithChildren) {
     }));
   }, []);
 
+  const applyServerHudSnapshot = useCallback((snap: HudApiFullSnapshot) => {
+    const { session } = snap;
+    setState((s) => ({
+      ...s,
+      sessionId: session.id,
+      sessionStatus: session.status,
+      metadata: {
+        title: session.title || session.context?.title || "Untitled Session",
+        facilitator: session.facilitator || session.context?.facilitator || "",
+        audience: session.audience || session.context?.audience || "",
+        role: session.role || session.context?.role || "",
+      },
+      notes: (snap.notes ?? s.notes).map((note) => ({
+        id: note.id,
+        label: note.label,
+        body: note.body,
+        linkedTagIds: note.linkedTagIds,
+      })),
+      tags: snap.tags.map((t) => mapServerHudTagToTranscriptTag(t)),
+    }));
+  }, []);
+
   const value = useMemo<SessionStoreValue>(
     () => ({
       ...state,
@@ -158,9 +197,23 @@ export function SessionStoreProvider({ children }: PropsWithChildren) {
       addNote,
       removeNote,
       updateNoteTags,
+      applyServerHudSnapshot,
     }),
-    
-    [state, focusTag, selectTranscript, setSessionId, setSessionStatus, setTags, upsertTag, updateMetadata, updateNotes, addNote, removeNote, updateNoteTags],
+    [
+      state,
+      focusTag,
+      selectTranscript,
+      setSessionId,
+      setSessionStatus,
+      setTags,
+      upsertTag,
+      updateMetadata,
+      updateNotes,
+      addNote,
+      removeNote,
+      updateNoteTags,
+      applyServerHudSnapshot,
+    ],
   );
 
   return (

@@ -29,7 +29,7 @@ export interface TranscriptSocketPrompt {
   title: string;
   text: string;
   timestamp: string;
-  transcriptIds: string[];
+  transcriptIds?: string[];
   suggestionOrigin?: "model" | "local";
 }
 

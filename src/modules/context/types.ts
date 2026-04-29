@@ -7,6 +7,8 @@ export interface SessionNote {
   label?: string;
   body: string;
   linkedTagIds?: string[];
+  isDraft?: boolean;
+  editorLocked?: boolean;
 }
 
 export interface SessionMetadata {

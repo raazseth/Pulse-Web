@@ -4,13 +4,14 @@ import { GlassPanel } from "@/shared/components/GlassPanel";
 import { SectionHeader } from "@/shared/components/SectionHeader";
 import { useAutoScroll } from "@/shared/hooks/useAutoScroll";
 import type { TagOption, TranscriptTag } from "@/modules/tagging/types";
-import { TranscriptItem, TranscriptStreamStatus } from "@/modules/transcript/types";
+import { TranscriptItem, TranscriptSignalCue, TranscriptStreamStatus } from "@/modules/transcript/types";
 import { TranscriptRow } from "./TranscriptRow";
 
 interface TranscriptPanelProps {
   activeItemId?: string;
   errorMessage?: string;
   items: TranscriptItem[];
+  signals?: TranscriptSignalCue[];
   status: TranscriptStreamStatus;
   onSelect: (id: string) => void;
   transcriptTags?: TranscriptTag[];
@@ -21,6 +22,7 @@ export function TranscriptPanel({
   activeItemId,
   errorMessage,
   items,
+  signals,
   status,
   onSelect,
   transcriptTags,
@@ -85,6 +87,7 @@ export function TranscriptPanel({
                 key={item.id}
                 isActive={item.id === activeItemId}
                 item={item}
+                rowSignals={signals?.filter((s) => s.transcriptId === item.id)}
                 onSelect={onSelect}
                 transcriptTags={transcriptTags}
                 availableTags={availableTags}

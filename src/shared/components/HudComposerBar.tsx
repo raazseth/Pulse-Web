@@ -169,20 +169,20 @@ export function HudComposerBar({
   const [speakerChip, setSpeakerChip] = useState<string>(() => {
     const raw = getDefaultSpeakerId?.();
     const id =
-      typeof raw === "string" && raw.trim() ? raw.trim() : "interviewer";
+      typeof raw === "string" && raw.trim() ? raw.trim() : "interviewee";
     return isPresetSpeakerId(id) ? id : SPEAKER_OTHER;
   });
   const [customSpeakerInput, setCustomSpeakerInput] = useState(() => {
     const raw = getDefaultSpeakerId?.();
     const id =
-      typeof raw === "string" && raw.trim() ? raw.trim() : "interviewer";
+      typeof raw === "string" && raw.trim() ? raw.trim() : "interviewee";
     return isPresetSpeakerId(id) ? "" : id;
   });
 
   const effectiveSpeakerId =
     speakerChip === SPEAKER_OTHER
-      ? String(customSpeakerInput ?? "").trim() || "interviewer"
-      : String(speakerChip ?? "interviewer").trim() || "interviewer";
+      ? String(customSpeakerInput ?? "").trim() || "interviewee"
+      : String(speakerChip ?? "interviewee").trim() || "interviewee";
 
   const handleSend = useCallback(() => {
     if (!onSendChunk || sendChunkDisabled) return;
@@ -192,7 +192,7 @@ export function HudComposerBar({
     const fallback =
       typeof rawDefault === "string" && rawDefault.trim()
         ? rawDefault.trim()
-        : "interviewer";
+        : "interviewee";
     const who = String(effectiveSpeakerId ?? "").trim() || fallback;
     const ok = onSendChunk({ text, speakerId: who });
     if (ok) {
@@ -226,7 +226,7 @@ export function HudComposerBar({
     (value: string) => {
       setCustomSpeakerInput(value);
       if (speakerChip === SPEAKER_OTHER) {
-        onSpeakerChange?.(String(value ?? "").trim() || "interviewer");
+        onSpeakerChange?.(String(value ?? "").trim() || "interviewee");
       }
     },
     [speakerChip, onSpeakerChange],

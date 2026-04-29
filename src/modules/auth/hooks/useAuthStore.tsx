@@ -115,3 +115,7 @@ export function useAuth(): AuthContext {
   if (!ctx) throw new Error("useAuth must be inside AuthProvider");
   return ctx;
 }
+
+export function useOptionalAuth(): AuthContext | null {
+  return useContext(Ctx);
+}

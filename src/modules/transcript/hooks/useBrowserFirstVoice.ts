@@ -79,7 +79,7 @@ export function useBrowserFirstVoice(opts: {
       }
       const chunk = finalText.trim();
       if (chunk) {
-        const speakerId = getSpeakerIdRef.current().trim() || "interviewer";
+        const speakerId = getSpeakerIdRef.current().trim() || "interviewee";
         console.log("[browser-transcript]", { text: chunk, speakerId });
         send(chunk);
       }

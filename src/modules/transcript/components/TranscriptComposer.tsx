@@ -61,7 +61,7 @@ export function TranscriptComposer({
   onVoiceAutoSendChange,
 }: TranscriptComposerProps) {
   const theme = useTheme();
-  const [speakerId, setSpeakerId] = useState("interviewer");
+  const [speakerId, setSpeakerId] = useState("interviewee");
 
   useEffect(() => {
     onSpeakerChange?.(speakerId);
@@ -70,7 +70,7 @@ export function TranscriptComposer({
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const body = lineDraft.trim();
-    const who = speakerId.trim() || "interviewer";
+    const who = speakerId.trim() || "interviewee";
     if (!body) return;
     const didSend = onSubmit({ text: body, speakerId: who });
     if (didSend) {
@@ -149,7 +149,7 @@ export function TranscriptComposer({
               <TextField
                 size="small"
                 label="ID or label"
-                placeholder="e.g. interviewer"
+                placeholder="e.g. interviewee"
                 value={speakerId}
                 onChange={(event) => setSpeakerId(event.target.value)}
                 disabled={disabled}

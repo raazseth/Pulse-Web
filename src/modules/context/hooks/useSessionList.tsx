@@ -11,6 +11,7 @@ import { useAuth } from "@/modules/auth/hooks/useAuthStore";
 import { fetchWithAuth } from "@/shared/utils/fetchWithAuth";
 import { getHudSessionsUrl, getHudSessionUrl, getHudSessionStatusUrl } from "@/shared/utils/hudApi";
 import { SessionStatus } from "@/modules/context/types";
+import type { HudApiFullSnapshot, HudSessionsListPayload } from "@/modules/context/types/hudApiSnapshot";
 
 export interface SessionSummary {
   id: string;
@@ -18,6 +19,7 @@ export interface SessionSummary {
   status: SessionStatus;
   noteCount: number;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface CreateSessionPayload {
@@ -30,13 +32,40 @@ export interface CreateSessionPayload {
 interface SessionListContextValue {
   sessions: SessionSummary[];
   loading: boolean;
-                                                                                                  
   listLoadSucceeded: boolean;
+  lastActiveSessionId: string | null;
   refetch: () => Promise<void>;
   createSession: (payload: CreateSessionPayload) => Promise<SessionSummary>;
   getSession: (id: string) => Promise<SessionSummary | null>;
+  fetchSessionSnapshot: (id: string) => Promise<HudApiFullSnapshot | null>;
   updateSessionStatus: (sessionId: string, status: SessionStatus) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
+}
+
+function parseSessionsListPayload(data: unknown): HudSessionsListPayload {
+  if (Array.isArray(data)) {
+    const sessions = data as SessionSummary[];
+    const active = sessions.find((s) => s.status === "active");
+    return {
+      sessions,
+      lastActiveSessionId: (active ?? sessions[0])?.id ?? null,
+    };
+  }
+  const o = (data ?? {}) as Partial<HudSessionsListPayload>;
+  return {
+    sessions: Array.isArray(o.sessions) ? o.sessions : [],
+    lastActiveSessionId: o.lastActiveSessionId ?? null,
+  };
+}
+
+function isFullSessionSnapshot(data: unknown): data is HudApiFullSnapshot {
+  return Boolean(
+    data &&
+      typeof data === "object" &&
+      "session" in data &&
+      (data as HudApiFullSnapshot).session &&
+      typeof (data as HudApiFullSnapshot).session.id === "string",
+  );
 }
 
 const Ctx = createContext<SessionListContextValue | null>(null);
@@ -50,6 +79,7 @@ export function SessionListProvider({ children }: PropsWithChildren) {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [listLoadSucceeded, setListLoadSucceeded] = useState(false);
+  const [lastActiveSessionId, setLastActiveSessionId] = useState<string | null>(null);
   const getToken = useCallback(() => accessToken, [accessToken]);
 
   const refetch = useCallback(async () => {
@@ -70,8 +100,13 @@ export function SessionListProvider({ children }: PropsWithChildren) {
       if (!res.ok) {
         return;
       }
-      const json = await res.json() as { data?: SessionSummary[] };
-      setSessions(json.data ?? []);
+      const json = await res.json() as { data?: unknown; lastActiveSessionId?: string | null };
+      const parsed = parseSessionsListPayload(json.data);
+      if (!parsed.lastActiveSessionId && json.lastActiveSessionId) {
+        parsed.lastActiveSessionId = json.lastActiveSessionId;
+      }
+      setSessions(parsed.sessions);
+      setLastActiveSessionId(parsed.lastActiveSessionId);
       setListLoadSucceeded(true);
     } finally {
       setLoading(false);
@@ -85,12 +120,14 @@ export function SessionListProvider({ children }: PropsWithChildren) {
       lastSessionFetchToken.current = null;
       setSessions([]);
       setListLoadSucceeded(false);
+      setLastActiveSessionId(null);
       return;
     }
     if (lastSessionFetchToken.current !== accessToken) {
       lastSessionFetchToken.current = accessToken;
       setSessions([]);
       setListLoadSucceeded(false);
+      setLastActiveSessionId(null);
     }
     refetch().catch(() => {
       setListLoadSucceeded(false);
@@ -123,8 +160,29 @@ export function SessionListProvider({ children }: PropsWithChildren) {
       const res = await fetchWithAuth(getHudSessionUrl(id), {}, getToken, refreshAccessToken);
       if (res.status === 404) return null;
       if (!res.ok) throw new Error(`Get session failed (${res.status})`);
-      const json = await res.json() as { data?: SessionSummary };
-      return json.data ?? null;
+      const json = await res.json() as { data?: unknown };
+      const data = json.data;
+      if (isFullSessionSnapshot(data)) {
+        return {
+          id: data.session.id,
+          title: data.session.title,
+          status: data.session.status,
+          noteCount: 0,
+          createdAt: data.session.createdAt,
+        };
+      }
+      return null;
+    },
+    [getToken, refreshAccessToken],
+  );
+
+  const fetchSessionSnapshot = useCallback(
+    async (id: string): Promise<HudApiFullSnapshot | null> => {
+      const res = await fetchWithAuth(getHudSessionUrl(id), {}, getToken, refreshAccessToken);
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`Get session failed (${res.status})`);
+      const json = await res.json() as { data?: unknown };
+      return isFullSessionSnapshot(json.data) ? json.data : null;
     },
     [getToken, refreshAccessToken],
   );
@@ -167,9 +225,11 @@ export function SessionListProvider({ children }: PropsWithChildren) {
         sessions,
         loading,
         listLoadSucceeded,
+        lastActiveSessionId,
         refetch,
         createSession,
         getSession,
+        fetchSessionSnapshot,
         updateSessionStatus,
         deleteSession,
       }}

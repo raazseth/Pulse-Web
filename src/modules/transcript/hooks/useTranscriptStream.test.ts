@@ -497,7 +497,7 @@ describe("useTranscriptStream — sendChunk", () => {
     expect(sendTranscriptChunk).toHaveBeenCalledWith(
       mockSocket,
       "s1",
-      { text: "hello", speakerId: "speaker-1" },
+      { text: "hello", speakerId: "interviewee" },
     );
     expect(result.current.items).toHaveLength(1);
     expect(result.current.items[0].text).toBe("hello");

@@ -3,6 +3,7 @@ import {
   AppBar,
   Box,
   Button,
+  Chip,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -44,7 +45,7 @@ export function TopBar({
   const session = useSessionStore();
   const { createSession, updateSessionStatus } = useSessionList();
   const navigate = useNavigate();
-  const { hudSocketStatus } = useTranscriptHud();
+  const { hudSocketStatus, hudSocketError } = useTranscriptHud();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -174,7 +175,31 @@ export function TopBar({
             >
               Session HUD
             </Typography>
-            {hudSocketStatus === "connected" ? <LiveDot /> : null}
+            {hudSocketStatus === "connected" ? (
+              <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexShrink: 0 }}>
+                <LiveDot />
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                  Live
+                </Typography>
+              </Stack>
+            ) : (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={
+                  hudSocketStatus === "error" && hudSocketError
+                    ? `${hudSocketStatus} · ${hudSocketError.slice(0, 56)}`
+                    : hudSocketStatus
+                }
+                color={hudSocketStatus === "error" ? "error" : "default"}
+                sx={{
+                  maxWidth: { xs: 140, sm: 280 },
+                  height: 22,
+                  "& .MuiChip-label": { px: 1, overflow: "hidden", textOverflow: "ellipsis" },
+                }}
+                title={hudSocketError ?? hudSocketStatus}
+              />
+            )}
           </Box>
 
           <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", flexShrink: 0 }}>

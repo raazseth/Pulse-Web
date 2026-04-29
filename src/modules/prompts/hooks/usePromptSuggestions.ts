@@ -24,13 +24,14 @@ function alignPromptTimes(prompt: PromptSuggestion, items: TranscriptItem[]): Pr
 
 function mapRemotePrompt(prompt: TranscriptSocketPrompt): PromptSuggestion {
   const origin = prompt.suggestionOrigin === "model" ? "model" : "local";
+  const ids = (prompt.transcriptIds ?? []).filter(Boolean);
   return {
     id: prompt.id,
     sessionId: prompt.sessionId,
     title: prompt.title,
     body: prompt.text,
-    transcriptId: prompt.transcriptIds[0],
-    transcriptIds: prompt.transcriptIds,
+    transcriptId: ids[ids.length - 1],
+    transcriptIds: ids.length ? ids : undefined,
     timestamp: prompt.timestamp,
     suggestionOrigin: origin,
   };

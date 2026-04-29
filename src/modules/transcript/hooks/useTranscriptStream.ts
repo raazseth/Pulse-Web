@@ -323,7 +323,7 @@ export function useTranscriptStream({
         }
         const text = payload.text.trim();
         if (!text) return false;
-        const speakerId = payload.speakerId?.trim() || "speaker-1";
+        const speakerId = payload.speakerId?.trim() || "interviewee";
         const timestamp = payload.timestamp ?? new Date().toISOString();
         const pendingId = `client-pending:${crypto.randomUUID()}`;
         optimisticPendingRef.current.push({

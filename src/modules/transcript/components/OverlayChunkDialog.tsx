@@ -37,13 +37,13 @@ export function OverlayChunkDialog({
   container,
 }: OverlayChunkDialogProps) {
   const theme = useTheme();
-  const [speakerId, setSpeakerId] = useState("interviewer");
+  const [speakerId, setSpeakerId] = useState("interviewee");
   const [text, setText] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setSpeakerId(getDefaultSpeakerId?.() ?? "interviewer");
+    setSpeakerId(getDefaultSpeakerId?.() ?? "interviewee");
     setText("");
     setSendError(null);
   }, [open, getDefaultSpeakerId]);
@@ -58,7 +58,7 @@ export function OverlayChunkDialog({
     const t = text.trim();
     if (!t || disabled) return;
     setSendError(null);
-    const ok = onSendChunk({ text: t, speakerId: speakerId.trim() || "interviewer" });
+    const ok = onSendChunk({ text: t, speakerId: speakerId.trim() || "interviewee" });
     if (ok) {
       setText("");
       handleClose();
@@ -104,7 +104,7 @@ export function OverlayChunkDialog({
               <TextField
                 size="small"
                 label="ID or label"
-                placeholder="e.g. interviewer"
+                placeholder="e.g. interviewee"
                 fullWidth
                 value={speakerId}
                 onChange={(ev) => setSpeakerId(ev.target.value)}
