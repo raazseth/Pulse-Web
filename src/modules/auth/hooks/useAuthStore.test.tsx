@@ -10,11 +10,12 @@ vi.mock("@/modules/auth/api/authApi", () => ({
   apiRegister: vi.fn(),
   apiRefresh: vi.fn(),
   apiLogout: vi.fn(),
+  persistRefreshTokenFromPair: vi.fn(),
+  clearStoredRefreshToken: vi.fn(),
 }));
 
 import { apiLogin, apiRefresh, apiLogout } from "@/modules/auth/api/authApi";
 import { AuthProvider, useAuth } from "./useAuthStore";
-import { DESKTOP_SENTINEL } from "@/shared/constants/auth";
 import type { AuthUser, TokenPair } from "@/modules/auth/types";
 
 const mockLogin = vi.mocked(apiLogin);
@@ -209,8 +210,3 @@ describe("AuthProvider — logout", () => {
 
 
 
-describe("DESKTOP_SENTINEL", () => {
-  it("is the string 'desktop'", () => {
-    expect(DESKTOP_SENTINEL).toBe("desktop");
-  });
-});

@@ -11,7 +11,6 @@ import { useAuth } from "@/modules/auth/hooks/useAuthStore";
 import { fetchWithAuth } from "@/shared/utils/fetchWithAuth";
 import { getHudSessionsUrl, getHudSessionUrl, getHudSessionStatusUrl } from "@/shared/utils/hudApi";
 import { SessionStatus } from "@/modules/context/types";
-import { DESKTOP_SENTINEL } from "@/shared/constants/auth";
 
 export interface SessionSummary {
   id: string;
@@ -43,7 +42,7 @@ interface SessionListContextValue {
 const Ctx = createContext<SessionListContextValue | null>(null);
 
 function canListSessionsWithToken(accessToken: string | null): accessToken is string {
-  return Boolean(accessToken && accessToken !== DESKTOP_SENTINEL);
+  return Boolean(accessToken);
 }
 
 export function SessionListProvider({ children }: PropsWithChildren) {

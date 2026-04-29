@@ -1,9 +1,24 @@
 import { AuthUser, TokenPair } from "@/modules/auth/types";
 import { resolveHudApiBaseUrl } from "@/shared/utils/hudApiBaseUrl";
 
-                                                                                            
+const LS_REFRESH = "pulse_refresh_token";
+
 function apiBase(): string {
   return resolveHudApiBaseUrl();
+}
+
+export function clearStoredRefreshToken(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(LS_REFRESH);
+}
+
+export function persistRefreshTokenFromPair(tokens: TokenPair): void {
+  if (typeof window === "undefined") return;
+  if (tokens.refreshToken) {
+    window.localStorage.setItem(LS_REFRESH, tokens.refreshToken);
+  } else {
+    window.localStorage.removeItem(LS_REFRESH);
+  }
 }
 
 interface AuthResult {
@@ -14,6 +29,7 @@ interface AuthResult {
 interface RefreshResult {
   accessToken: string;
   user: AuthUser;
+  refreshToken?: string;
 }
 
 async function post<T>(path: string, body: Record<string, string> = {}): Promise<T> {
@@ -59,12 +75,24 @@ export async function apiLogin(email: string, password: string): Promise<AuthRes
 }
 
 export async function apiRefresh(): Promise<RefreshResult> {
-  return post<RefreshResult>("/refresh");
+  const stored =
+    typeof window !== "undefined" ? window.localStorage.getItem(LS_REFRESH) : null;
+  const body: Record<string, string> = stored ? { refreshToken: stored } : {};
+  const data = await post<RefreshResult>("/refresh", body);
+  if (typeof window !== "undefined" && data.refreshToken) {
+    window.localStorage.setItem(LS_REFRESH, data.refreshToken);
+  }
+  return data;
 }
 
 export async function apiLogout(): Promise<void> {
+  const stored =
+    typeof window !== "undefined" ? window.localStorage.getItem(LS_REFRESH) : null;
   await fetch(`${apiBase()}/auth/logout`, {
     method: "DELETE",
+    headers: stored ? { "Content-Type": "application/json" } : undefined,
     credentials: "include",
+    body: stored ? JSON.stringify({ refreshToken: stored }) : undefined,
   });
+  clearStoredRefreshToken();
 }

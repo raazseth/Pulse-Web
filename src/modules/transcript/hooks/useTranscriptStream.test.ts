@@ -1,10 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { DESKTOP_SENTINEL } from "@/shared/constants/auth";
-
-
-
-
 
 vi.mock("@/modules/transcript/services/transcriptSocket", () => ({
   createTranscriptSocket: vi.fn(),
@@ -127,9 +122,9 @@ describe("useTranscriptStream — connection lifecycle", () => {
     );
   });
 
-  it("passes null as token when accessToken is DESKTOP_SENTINEL", () => {
+  it("passes null as token when accessToken is null", () => {
     renderHook(() =>
-      useTranscriptStream({ sessionId: "s1", accessToken: DESKTOP_SENTINEL }),
+      useTranscriptStream({ sessionId: "s1", accessToken: null }),
     );
     expect(createTranscriptSocket).toHaveBeenCalledWith(
       expect.objectContaining({ token: null }),

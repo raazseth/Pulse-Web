@@ -1,4 +1,3 @@
-import { DESKTOP_SENTINEL } from "@/shared/constants/auth";
 import { resolveHudApiBaseUrl } from "@/shared/utils/hudApiBaseUrl";
 
 function apiBase(): string {
@@ -35,6 +34,6 @@ export const getHudSessionStartUrl = (sessionId: string) => `${session(sessionId
 export const getHudSessionStopUrl = (sessionId: string) => `${session(sessionId)}/stop`;
 
 export function getAuthHeaders(accessToken: string | null): Record<string, string> {
-  if (!accessToken || accessToken === DESKTOP_SENTINEL) return {};
+  if (!accessToken) return {};
   return { Authorization: `Bearer ${accessToken}` };
 }

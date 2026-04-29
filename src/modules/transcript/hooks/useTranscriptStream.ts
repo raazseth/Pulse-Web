@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { DESKTOP_SENTINEL } from "@/shared/constants/auth";
 import {
   createTranscriptSocket,
   sendAudioChunk,
@@ -236,7 +235,7 @@ export function useTranscriptStream({
       const socket = createTranscriptSocket({
         url: resolveTranscriptWsUrl(),
         sessionId,
-        token: token === DESKTOP_SENTINEL ? null : token,
+        token,
         onOpen: () => setStatus("connected"),
         onClose: (wasError) => {
           if (isStopped) {

@@ -54,10 +54,6 @@ describe("getAuthHeaders", () => {
     expect(getAuthHeaders(null)).toEqual({});
   });
 
-  it("returns empty object for the 'desktop' sentinel token", () => {
-    expect(getAuthHeaders("desktop")).toEqual({});
-  });
-
   it("returns Authorization header for a real token", () => {
     const token = "eyJhbGciOiJIUzI1NiJ9.payload.sig";
     expect(getAuthHeaders(token)).toEqual({ Authorization: `Bearer ${token}` });

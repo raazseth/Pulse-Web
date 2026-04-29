@@ -33,7 +33,6 @@ import { useSystemAudioCapture } from "@/modules/transcript/hooks/useSystemAudio
 import { getHudPromptUrl, getHudSessionStartUrl, getHudSessionStopUrl } from "@/shared/utils/hudApi";
 import { getRuntimeApiConfig } from "@/shared/utils/hudApiBaseUrl";
 import { fetchWithAuth } from "@/shared/utils/fetchWithAuth";
-import { DESKTOP_SENTINEL } from "@/shared/constants/auth";
 import { useAuth } from "@/modules/auth/hooks/useAuthStore";
 import { defaultTagOptions } from "@/modules/tagging/services/taggingStorage";
 import { transcriptLineHasCatalogTag } from "@/modules/tagging/utils/transcriptTagDedupe";
@@ -279,7 +278,7 @@ export function App() {
   });
 
   const handleSystemAudioStart = useCallback(async () => {
-    if (accessToken && accessToken !== DESKTOP_SENTINEL) {
+    if (accessToken) {
       fetchWithAuth(
         getHudSessionStartUrl(session.sessionId),
         { method: "POST" },
@@ -292,7 +291,7 @@ export function App() {
 
   const handleSystemAudioStop = useCallback(() => {
     systemAudio.stop();
-    if (accessToken && accessToken !== DESKTOP_SENTINEL) {
+    if (accessToken) {
       fetchWithAuth(
         getHudSessionStopUrl(session.sessionId),
         { method: "POST" },
@@ -391,7 +390,7 @@ export function App() {
 
   const contextSyncTimer = useRef<number | null>(null);
   useEffect(() => {
-    if (!accessToken || accessToken === DESKTOP_SENTINEL) return;
+    if (!accessToken) return;
     if (contextSyncTimer.current) window.clearTimeout(contextSyncTimer.current);
     contextSyncTimer.current = window.setTimeout(() => {
       contextSyncTimer.current = null;
@@ -416,7 +415,7 @@ export function App() {
   ]);
 
   useEffect(() => {
-    if (!accessToken || accessToken === DESKTOP_SENTINEL) return;
+    if (!accessToken) return;
     let cancelled = false;
     noteApi
       .listNotes()
@@ -446,7 +445,7 @@ export function App() {
   const sessionBootstrapTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!accessToken || accessToken === DESKTOP_SENTINEL) {
+    if (!accessToken) {
       listPrevLoadingRef.current = undefined;
       emptyListBootstrapAttemptedRef.current = false;
       sessionBootstrapTokenRef.current = null;

@@ -1,7 +1,5 @@
-import { DESKTOP_SENTINEL } from "@/shared/constants/auth";
-
 function buildAuthHeaders(token: string | null): Record<string, string> {
-  if (!token || token === DESKTOP_SENTINEL) return {};
+  if (!token) return {};
   return { Authorization: `Bearer ${token}` };
 }
 
