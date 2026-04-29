@@ -88,6 +88,40 @@ export function sendTranscriptChunk(
   );
 }
 
+export async function sendAudioChunk(
+  socket: WebSocket,
+  sessionId: string,
+  payload: {
+    audio: Blob;
+    mimeType: string;
+    speakerId?: string;
+    lang?: string;
+    context?: Record<string, string>;
+  },
+): Promise<void> {
+  if (socket.readyState !== WebSocket.OPEN) return;
+  const ab = await payload.audio.arrayBuffer();
+  const bytes = new Uint8Array(ab);
+  let binary = "";
+  const CHUNK = 8192;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...(bytes.subarray(i, i + CHUNK) as unknown as number[]));
+  }
+  socket.send(
+    JSON.stringify({
+      type: "audio:chunk",
+      payload: {
+        sessionId,
+        audio: btoa(binary),
+        mimeType: payload.mimeType,
+        speakerId: payload.speakerId,
+        lang: payload.lang,
+        context: payload.context,
+      },
+    }),
+  );
+}
+
 export function sendTranscriptTag(
   socket: WebSocket,
   payload: {

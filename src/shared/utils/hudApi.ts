@@ -31,6 +31,9 @@ export const getHudNoteTagUrl = (sessionId: string, noteId: string, tagId: strin
 
 export const getAudioTranscribeUrl = () => hud("/audio/transcribe");
 
+export const getHudSessionStartUrl = (sessionId: string) => `${session(sessionId)}/start`;
+export const getHudSessionStopUrl = (sessionId: string) => `${session(sessionId)}/stop`;
+
 export function getAuthHeaders(accessToken: string | null): Record<string, string> {
   if (!accessToken || accessToken === DESKTOP_SENTINEL) return {};
   return { Authorization: `Bearer ${accessToken}` };

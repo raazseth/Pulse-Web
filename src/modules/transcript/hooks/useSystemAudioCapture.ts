@@ -4,6 +4,7 @@ import { fetchWithAuth } from "@/shared/utils/fetchWithAuth";
 
 interface UseSystemAudioCaptureOptions {
   onChunk: (text: string) => void;
+  sendAudioChunk?: (audio: Blob, mimeType: string) => Promise<boolean>;
   onError?: () => void;
   accessToken?: string | null;
   refreshAccessToken?: () => Promise<string | null>;
@@ -19,7 +20,10 @@ const SUPPORTED_MIME_TYPES = [
   "audio/mp4",
 ];
 
-const FETCH_TIMEOUT_MS = 10_000;
+const FETCH_TIMEOUT_MS = 30_000;
+// Silence heuristic: Opus compresses real speech to >> this per second.
+// Very quiet / paused audio produces tiny blobs we can safely skip.
+const SILENCE_BYTES_PER_SEC = 600;
 
 function getSupportedMimeType(): string {
   for (const type of SUPPORTED_MIME_TYPES) {
@@ -32,6 +36,7 @@ function getSupportedMimeType(): string {
 
 export function useSystemAudioCapture({
   onChunk,
+  sendAudioChunk,
   onError,
   accessToken,
   refreshAccessToken,
@@ -53,6 +58,9 @@ export function useSystemAudioCapture({
   const onErrorRef = useRef(onError);
   useEffect(() => { onErrorRef.current = onError; });
 
+  const sendAudioChunkRef = useRef(sendAudioChunk);
+  useEffect(() => { sendAudioChunkRef.current = sendAudioChunk; });
+
   const accessTokenRef = useRef<string | null>(accessToken ?? null);
   useEffect(() => { accessTokenRef.current = accessToken ?? null; });
 
@@ -61,11 +69,16 @@ export function useSystemAudioCapture({
 
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const cycleTimerRef = useRef<number | null>(null);
   const activeRequestsRef = useRef<Set<AbortController>>(new Set());
   const captureSessionRef = useRef(0);
 
   const stop = useCallback(() => {
     captureSessionRef.current += 1;
+    if (cycleTimerRef.current !== null) {
+      window.clearTimeout(cycleTimerRef.current);
+      cycleTimerRef.current = null;
+    }
     for (const controller of activeRequestsRef.current) {
       controller.abort();
     }
@@ -115,76 +128,116 @@ export function useSystemAudioCapture({
 
       const mimeType = getSupportedMimeType();
       const audioOnly = new MediaStream(audioTracks);
-      const recorder = new MediaRecorder(audioOnly, { mimeType });
-      recorderRef.current = recorder;
 
       captureSessionRef.current += 1;
       const chunkSession = captureSessionRef.current;
 
-      recorder.ondataavailable = async (event) => {
-        if (event.data.size < 100) return;
+      // Each cycle creates a fresh MediaRecorder so every blob has its own EBML
+      // header and is self-contained — timeslice mode only puts headers in the
+      // first chunk, making all subsequent chunks unreadable by ffmpeg.
+      const startCycle = () => {
+        if (chunkSession !== captureSessionRef.current) return;
 
-        const controller = new AbortController();
-        activeRequestsRef.current.add(controller);
+        const cycleRecorder = new MediaRecorder(audioOnly, { mimeType });
+        recorderRef.current = cycleRecorder;
 
-        const transcribeUrl = `${getAudioTranscribeUrl()}?lang=${encodeURIComponent(lang)}`;
-        try {
-          const res = await fetchWithAuth(
-            transcribeUrl,
-            {
-              method: "POST",
-              headers: { "Content-Type": event.data.type || mimeType },
-              body: event.data,
-              signal: AbortSignal.any([
-                controller.signal,
-                AbortSignal.timeout(FETCH_TIMEOUT_MS),
-              ]),
-            },
-            () => accessTokenRef.current,
-            async () => {
-              const refresh = refreshAccessTokenRef.current;
-              return refresh ? refresh() : null;
-            },
-          );
-
+        cycleRecorder.ondataavailable = async (event) => {
+          const silenceThreshold = SILENCE_BYTES_PER_SEC * (chunkIntervalMs / 1000);
+          if (event.data.size < silenceThreshold) return;
           if (chunkSession !== captureSessionRef.current) return;
 
-          if (res.ok) {
-            const json = await res.json() as { data?: { text: string }; success: boolean };
+          const chunkMime = event.data.type || mimeType;
+          console.log("[system-audio] chunk captured", { sizeBytes: event.data.size, mimeType: chunkMime });
+
+          const wsSend = sendAudioChunkRef.current;
+          if (wsSend) {
+            try {
+              const sent = await wsSend(event.data, chunkMime);
+              if (sent) {
+                console.log("[system-audio] chunk sent via WS", { sizeBytes: event.data.size });
+                return;
+              }
+            } catch {
+              // fall through to HTTP
+            }
+          }
+
+          // HTTP fallback path
+          const controller = new AbortController();
+          activeRequestsRef.current.add(controller);
+
+          const transcribeUrl = `${getAudioTranscribeUrl()}?lang=${encodeURIComponent(lang)}`;
+          try {
+            const res = await fetchWithAuth(
+              transcribeUrl,
+              {
+                method: "POST",
+                headers: { "Content-Type": chunkMime },
+                body: event.data,
+                signal: AbortSignal.any([
+                  controller.signal,
+                  AbortSignal.timeout(FETCH_TIMEOUT_MS),
+                ]),
+              },
+              () => accessTokenRef.current,
+              async () => {
+                const refresh = refreshAccessTokenRef.current;
+                return refresh ? refresh() : null;
+              },
+            );
+
             if (chunkSession !== captureSessionRef.current) return;
-            const text = json.data?.text?.trim();
-            if (text) onChunkRef.current(text);
-          } else {
+
+            if (res.ok) {
+              const json = await res.json() as { data?: { text: string }; success: boolean };
+              if (chunkSession !== captureSessionRef.current) return;
+              const text = json.data?.text?.trim();
+              if (text) onChunkRef.current(text);
+            } else {
+              stop();
+              onErrorRef.current?.();
+            }
+          } catch (err) {
+            if (err instanceof Error && err.name === "AbortError") return;
+            if (chunkSession !== captureSessionRef.current) return;
             stop();
             onErrorRef.current?.();
+          } finally {
+            activeRequestsRef.current.delete(controller);
           }
-        } catch (err) {
-          if (err instanceof Error && err.name === "AbortError") return;
+        };
+
+        cycleRecorder.onerror = () => {
           if (chunkSession !== captureSessionRef.current) return;
+          setError("MediaRecorder error during system audio capture");
           stop();
           onErrorRef.current?.();
-        } finally {
-          activeRequestsRef.current.delete(controller);
-        }
+        };
+
+        cycleRecorder.onstop = () => {
+          if (chunkSession !== captureSessionRef.current) {
+            setIsListening(false);
+            return;
+          }
+          startCycle();
+        };
+
+        cycleRecorder.start(); // no timeslice — complete blob with headers on every stop
+        cycleTimerRef.current = window.setTimeout(() => {
+          cycleTimerRef.current = null;
+          if (cycleRecorder.state === "recording") cycleRecorder.stop();
+        }, chunkIntervalMs);
       };
 
-      recorder.onerror = () => {
-        if (chunkSession !== captureSessionRef.current) return;
-        setError("MediaRecorder error during system audio capture");
-        stop();
-        onErrorRef.current?.();
-      };
-
-      recorder.onstop = () => {
-        setIsListening(false);
-      };
-
-      // Auto-stop when the user ends sharing from the browser's built-in UI
-      audioTracks[0].onended = () => {
+      // Stop when the user clicks "Stop sharing" in Chrome's share bar.
+      // addEventListener is more reliable than onended (can't be overwritten)
+      // and we listen on every track so any track ending triggers cleanup.
+      const handleTrackEnded = () => {
         if (chunkSession === captureSessionRef.current) stop();
       };
+      audioTracks.forEach((t) => t.addEventListener("ended", handleTrackEnded));
 
-      recorder.start(chunkIntervalMs);
+      startCycle();
       setIsListening(true);
       setError(undefined);
     } catch (err) {
@@ -201,6 +254,10 @@ export function useSystemAudioCapture({
 
   useEffect(() => () => {
     captureSessionRef.current += 1;
+    if (cycleTimerRef.current !== null) {
+      window.clearTimeout(cycleTimerRef.current);
+      cycleTimerRef.current = null;
+    }
     for (const controller of activeRequestsRef.current) {
       controller.abort();
     }

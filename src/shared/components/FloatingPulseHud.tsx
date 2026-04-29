@@ -76,6 +76,7 @@ export interface FloatingPulseHudProps {
   sessionTitle?: string;
   sessionId?: string;
   onSystemAudioStart?: () => Promise<void> | void;
+  transcribing?: boolean;
 }
 
 export function FloatingPulseHud(props: FloatingPulseHudProps) {
@@ -99,6 +100,7 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
     sessionTitle,
     sessionId,
     onSystemAudioStart,
+    transcribing = false,
   } = props;
 
   const theme = useTheme();
@@ -314,6 +316,7 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
       setInterviewStarting(false);
     }
   }, [onSystemAudioStart, isElectron, openDocumentPip]);
+
   const mainFloatVisible =
     mounted && tabBackgrounded && !pipWindow && !dismissed;
 
@@ -336,7 +339,7 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
           variant="contained"
           size="medium"
           startIcon={
-            interviewStarting ? (
+            interviewStarting || transcribing ? (
               <CircularProgress size={16} color="inherit" />
             ) : (
               <PlayArrowRoundedIcon />
@@ -348,7 +351,7 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
             position: "fixed",
             right: 20,
             bottom: 20,
-            zIndex: 10049,
+            zIndex: 1000,
             borderRadius: "100px",
             fontWeight: 700,
             textTransform: "none",
@@ -378,7 +381,7 @@ export function FloatingPulseHud(props: FloatingPulseHudProps) {
             },
           }}
         >
-          Start Interview
+          {transcribing ? "Transcribing…" : "Start Interview"}
         </Button>
       ) : null}
 

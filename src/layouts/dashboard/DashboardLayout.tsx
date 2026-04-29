@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { Box, useMediaQuery, useTheme } from "@mui/material";
 import { Outlet } from "react-router-dom";
 import { TranscriptHudProvider } from "@/modules/transcript/context/TranscriptHudContext";
-import { NavSidebar } from "./NavSidebar";
+import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { PwaInstallBanner } from "@/shared/components/PwaInstallBanner";
 
@@ -41,7 +41,7 @@ export function DashboardLayout() {
           desktopSidebarCollapsed={isLg && !desktopSidebarExpanded}
           onExpandDesktopSidebar={() => setDesktopSidebarExpandedPersisted(true)}
         />
-        <NavSidebar
+        <Sidebar
           width={SIDEBAR_WIDTH}
           topbarHeight={TOPBAR_HEIGHT}
           open={sidebarOpen}

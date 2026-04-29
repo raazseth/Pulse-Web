@@ -20,7 +20,7 @@ const SUPPORTED_MIME_TYPES = [
   "audio/mp4",
 ];
 
-const FETCH_TIMEOUT_MS = 10_000;
+const FETCH_TIMEOUT_MS = 30_000;
 
 function getSupportedMimeType(): string {
   for (const type of SUPPORTED_MIME_TYPES) {

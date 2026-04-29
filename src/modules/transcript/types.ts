@@ -75,7 +75,11 @@ export type TranscriptSocketServerMessage =
   | { type: "prompt:update"; payload: TranscriptSocketPrompt[] }
   | { type: "tag:created"; payload: TranscriptSocketTag }
   | { type: "signal:detected"; payload: TranscriptSignalCue[] }
-  | { type: "error"; payload: { message: string } };
+  | { type: "error"; payload: { message: string } }
+  | { type: "TRANSCRIPT_PARTIAL"; payload: { id: string; sessionId: string; speakerId: string } }
+  | { type: "TRANSCRIPT_PARTIAL_CANCEL"; payload: { id: string } }
+  | { type: "TRANSCRIPT_FINAL"; payload: TranscriptItem & { partialId: string } }
+  | { type: "AI_SUGGESTION"; payload: TranscriptSocketPrompt[] };
 
 export type TranscriptStreamStatus =
   | "connecting"

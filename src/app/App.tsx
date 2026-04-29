@@ -26,10 +26,11 @@ import { TranscriptPanel } from "@/modules/transcript/components/TranscriptPanel
 import { FloatingPulseHudPanel } from "@/shared/components/FloatingPulseHudPanel";
 import { useTranscriptHud } from "@/modules/transcript/context/TranscriptHudContext";
 import { useTranscriptStream } from "@/modules/transcript/hooks/useTranscriptStream";
+import { useTranscriptMainBridge, useTranscriptPipBridge } from "@/modules/transcript/hooks/useTranscriptBridge";
 import { useMicCapture } from "@/modules/transcript/hooks/useMicCapture";
 import { useBrowserFirstVoice } from "@/modules/transcript/hooks/useBrowserFirstVoice";
 import { useSystemAudioCapture } from "@/modules/transcript/hooks/useSystemAudioCapture";
-import { getHudPromptUrl } from "@/shared/utils/hudApi";
+import { getHudPromptUrl, getHudSessionStartUrl, getHudSessionStopUrl } from "@/shared/utils/hudApi";
 import { getRuntimeApiConfig } from "@/shared/utils/hudApiBaseUrl";
 import { fetchWithAuth } from "@/shared/utils/fetchWithAuth";
 import { DESKTOP_SENTINEL } from "@/shared/constants/auth";
@@ -66,9 +67,11 @@ function mapRemoteTag(tag: {
 }
 
 export function App() {
+  const isPipMode = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("pip");
   const { accessToken, refreshAccessToken } = useAuth();
   const { setHudSocketStatus } = useTranscriptHud();
   const speakerIdRef = useRef("interviewer");
+  const sendChunkRef = useRef<(payload: { text: string; speakerId?: string; timestamp?: string; context?: Record<string, string> }) => boolean>(() => false);
   const [voiceAutoSend, setVoiceAutoSend] = useState(true);
   const [composerLine, setComposerLine] = useState("");
   const session = useSessionStore();
@@ -82,6 +85,7 @@ export function App() {
     sessionId: session.sessionId,
     accessToken,
     refreshAccessToken,
+    disabled: isPipMode,
     onSessionState: useCallback((state: TranscriptSessionState) => {
       session.setTags(state.tags.map(mapRemoteTag));
     }, [session.setTags]),
@@ -90,9 +94,27 @@ export function App() {
     }, [session.upsertTag]),
   });
 
-  const promptSuggestions = usePromptSuggestions(
+  // Bridge: main window broadcasts transcript state to pip; pip relays sends back.
+  // Both hooks are always called (React rules); `enabled` flag controls active side.
+  useTranscriptMainBridge(
+    !isPipMode,
     transcript.items,
     transcript.prompts,
+    transcript.signals,
+    transcript.status,
+    transcript.sendChunk,
+  );
+  const pipBridge = useTranscriptPipBridge(isPipMode);
+
+  // Route sendChunk through the active source before any callbacks are defined.
+  sendChunkRef.current = isPipMode ? pipBridge.sendChunk : transcript.sendChunk;
+
+  const effectiveItems = isPipMode ? pipBridge.items : transcript.items;
+  const effectivePrompts = isPipMode ? pipBridge.prompts : transcript.prompts;
+
+  const promptSuggestions = usePromptSuggestions(
+    effectiveItems,
+    effectivePrompts,
   );
 
   const timelineMarkers = useTimelineMarkers({
@@ -175,7 +197,7 @@ export function App() {
       speakerId: string;
       transcriptSource?: "browser-speech" | "server-transcribe";
     }) =>
-      transcript.sendChunk({
+      sendChunkRef.current({
         text,
         speakerId,
         context: {
@@ -187,7 +209,7 @@ export function App() {
           ...(transcriptSource ? { transcriptSource } : {}),
         },
       }),
-    [transcript.sendChunk, session.metadata, session.notes],
+    [session.metadata, session.notes],
   );
 
   const applyVoiceToComposerLine = useCallback((chunk: string, replace: boolean) => {
@@ -239,7 +261,46 @@ export function App() {
     accessToken,
     refreshAccessToken,
     onChunk: handleSystemAudioChunk,
+    sendAudioChunk: isPipMode ? undefined : (audio, mimeType) =>
+      transcript.sendAudioChunk({
+        audio,
+        mimeType,
+        speakerId: "system",
+        lang: "en",
+        context: {
+          title: session.metadata.title,
+          facilitator: session.metadata.facilitator,
+          audience: session.metadata.audience,
+          role: session.metadata.role,
+          notes: session.notes.map((n) => n.body).join("\n"),
+          transcriptSource: "server-transcribe",
+        },
+      }),
   });
+
+  const handleSystemAudioStart = useCallback(async () => {
+    if (accessToken && accessToken !== DESKTOP_SENTINEL) {
+      fetchWithAuth(
+        getHudSessionStartUrl(session.sessionId),
+        { method: "POST" },
+        () => accessToken,
+        refreshAccessToken,
+      ).catch(() => {});
+    }
+    await systemAudio.start();
+  }, [accessToken, refreshAccessToken, session.sessionId, systemAudio.start]);
+
+  const handleSystemAudioStop = useCallback(() => {
+    systemAudio.stop();
+    if (accessToken && accessToken !== DESKTOP_SENTINEL) {
+      fetchWithAuth(
+        getHudSessionStopUrl(session.sessionId),
+        { method: "POST" },
+        () => accessToken,
+        refreshAccessToken,
+      ).catch(() => {});
+    }
+  }, [accessToken, refreshAccessToken, session.sessionId, systemAudio.stop]);
 
   const noteApi = useNoteApi({
     sessionId: session.sessionId,
@@ -488,21 +549,7 @@ export function App() {
     transcribeFallbackRef: voiceTranscribeFallbackRef,
   });
 
-  const isPipMode = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("pip");
-  const isElectronEnv = typeof window !== "undefined" && "api" in window;
-  const [interviewStarting, setInterviewStarting] = useState(false);
-
-  const handleStartInterview = useCallback(async () => {
-    setInterviewStarting(true);
-    try {
-      await systemAudio.start();
-      if (isElectronEnv) {
-        void window.api?.startInterview();
-      }
-    } finally {
-      setInterviewStarting(false);
-    }
-  }, [systemAudio, isElectronEnv]);
+  const pipConnected = pipBridge.status === "connected";
 
   if (isPipMode) {
     return (
@@ -511,8 +558,8 @@ export function App() {
         layout="pip"
         helpText=""
         showPipLaunch={false}
-        transcriptPreview={transcript.items.slice(-30)}
-        transcriptStatus={transcript.status}
+        transcriptPreview={pipBridge.items.slice(-30)}
+        transcriptStatus={pipBridge.status}
         prompts={promptSuggestions.prompts}
         onPromptUse={handlePromptUse}
         onPromptDismiss={handlePromptDismiss}
@@ -521,7 +568,7 @@ export function App() {
         voiceActive={voice.isActive}
         onVoiceToggle={voice.toggle}
         onSendChunk={handleComposerSubmit}
-        sendChunkDisabled={!isConnected}
+        sendChunkDisabled={!pipConnected}
         getDefaultSpeakerId={() => speakerIdRef.current}
         composerLine={composerLine}
         onComposerLineChange={setComposerLine}
@@ -654,7 +701,8 @@ export function App() {
         }}
         sessionTitle={session.metadata.title}
         sessionId={session.sessionId}
-        onSystemAudioStart={systemAudio.start}
+        onSystemAudioStart={handleSystemAudioStart}
+        transcribing={transcript.transcribing}
       />
     </Box>
   );

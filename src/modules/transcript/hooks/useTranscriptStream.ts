@@ -9,6 +9,7 @@ import {
 import { DESKTOP_SENTINEL } from "@/shared/constants/auth";
 import {
   createTranscriptSocket,
+  sendAudioChunk,
   sendTranscriptChunk,
   sendTranscriptTag,
 } from "@/modules/transcript/services/transcriptSocket";
@@ -41,6 +42,7 @@ interface UseTranscriptStreamOptions {
   refreshAccessToken?: () => Promise<string | null>;
   onSessionState?: (state: TranscriptSessionState) => void;
   onTagCreated?: (tag: TranscriptSocketTag) => void;
+  disabled?: boolean;
 }
 
 function mapIdbEntry(entry: IdbTranscriptEntry): TranscriptItem {
@@ -63,12 +65,15 @@ export function useTranscriptStream({
   refreshAccessToken,
   onSessionState,
   onTagCreated,
+  disabled = false,
 }: UseTranscriptStreamOptions) {
   const [items, setItems] = useState<TranscriptItem[]>([]);
   const [prompts, setPrompts] = useState<TranscriptSocketPrompt[]>([]);
   const [signals, setSignals] = useState<TranscriptSignalCue[]>([]);
   const [status, setStatus] = useState<TranscriptStreamStatus>("connecting");
   const [errorMessage, setErrorMessage] = useState<string>();
+  const [transcribing, setTranscribing] = useState(false);
+  const transcribingIds = useRef<Set<string>>(new Set());
   const reconnectTimer = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const idbSaveTimer = useRef<number | null>(null);
@@ -160,10 +165,63 @@ export function useTranscriptStream({
     if (message.type === "error" && message.payload) {
       setErrorMessage((message.payload as { message: string }).message);
       setStatus("error");
+      return;
+    }
+
+    if (message.type === "TRANSCRIPT_PARTIAL") {
+      const { id, speakerId } = message.payload as { id: string; speakerId: string };
+      transcribingIds.current.add(id);
+      startTransition(() => {
+        setTranscribing(true);
+        setItems((current) => {
+          const placeholder = stampItem({
+            id,
+            text: "…",
+            timestamp: new Date().toISOString(),
+            speakerId,
+          });
+          return [...capBeforeAppend(current), placeholder];
+        });
+      });
+      return;
+    }
+
+    if (message.type === "TRANSCRIPT_PARTIAL_CANCEL") {
+      const { id } = message.payload as { id: string };
+      transcribingIds.current.delete(id);
+      startTransition(() => {
+        setTranscribing(transcribingIds.current.size > 0);
+        setItems((current) => current.filter((e) => e.id !== id));
+      });
+      return;
+    }
+
+    if (message.type === "TRANSCRIPT_FINAL") {
+      const { partialId, ...item } = message.payload as TranscriptItem & { partialId: string };
+      transcribingIds.current.delete(partialId);
+      startTransition(() => {
+        setTranscribing(transcribingIds.current.size > 0);
+        setItems((current) => {
+          const withoutPlaceholder = current.filter((e) => e.id !== partialId);
+          if (withoutPlaceholder.some((e) => e.id === item.id)) return withoutPlaceholder;
+          return [...capBeforeAppend(withoutPlaceholder), stampItem(item)];
+        });
+      });
+      return;
+    }
+
+    if (message.type === "AI_SUGGESTION") {
+      const incoming = message.payload as TranscriptSocketPrompt[];
+      setPrompts((current) => {
+        if (current.length === incoming.length && current.every((p, i) => p.id === incoming[i].id)) return current;
+        return incoming;
+      });
+      return;
     }
   });
 
   useEffect(() => {
+    if (disabled) return;
     let isStopped = false;
 
     const connect = () => {
@@ -216,18 +274,20 @@ export function useTranscriptStream({
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [sessionId]);
+  }, [sessionId, disabled]);
 
   useEffect(() => {
+    if (disabled) return;
     startTransition(() => {
       setItems([]);
       setPrompts([]);
       setSignals([]);
       setErrorMessage(undefined);
     });
-  }, [sessionId]);
+  }, [sessionId, disabled]);
 
   useEffect(() => {
+    if (disabled) return;
     loadSession(sessionId)
       .then((saved) => {
         if (saved && saved.transcript.length > 0) {
@@ -240,7 +300,7 @@ export function useTranscriptStream({
   }, [sessionId]);
 
   useEffect(() => {
-    if (items.length === 0) return;
+    if (disabled || items.length === 0) return;
     if (idbSaveTimer.current) clearTimeout(idbSaveTimer.current);
     idbSaveTimer.current = window.setTimeout(() => {
       saveSession({
@@ -298,9 +358,21 @@ export function useTranscriptStream({
         sendTranscriptTag(socketRef.current, { sessionId, ...payload });
         return true;
       },
+      async sendAudioChunk(payload: {
+        audio: Blob;
+        mimeType: string;
+        speakerId?: string;
+        lang?: string;
+        context?: Record<string, string>;
+      }): Promise<boolean> {
+        const socket = socketRef.current;
+        if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+        await sendAudioChunk(socket, sessionId, payload);
+        return true;
+      },
     }),
     [sessionId],
   );
 
-  return { items, prompts, signals, status, errorMessage, ...actions };
+  return { items, prompts, signals, status, errorMessage, transcribing, ...actions };
 }
