@@ -643,6 +643,11 @@ export const FloatingPulseHudPanel = memo(function FloatingPulseHudPanel({
     const acceptedRefsTail = (a: AcceptedMsg) =>
       idsForTranscriptRef(a.transcriptId, a.transcriptIds).has(tail.id);
 
+    const anchoredToTail = prompts.filter((p) => promptRefsTail(p));
+    if (!anchoredToTail.length) {
+      return transcriptLoading;
+    }
+
     let resolvedMs = 0;
     for (const p of visiblePrompts) {
       if (promptRefsTail(p)) resolvedMs = Math.max(resolvedMs, parseMs(p.timestamp));
@@ -654,14 +659,11 @@ export const FloatingPulseHudPanel = memo(function FloatingPulseHudPanel({
       }
     }
 
-    const anchoredToTail = prompts.filter((p) => promptRefsTail(p));
-    const allAnchoredHandled =
-      anchoredToTail.length > 0 &&
-      anchoredToTail.every(
-        (p) =>
-          dismissedPromptIds.has(p.id) ||
-          acceptedMessages.some((a) => a.id === `accepted-${p.id}`),
-      );
+    const allAnchoredHandled = anchoredToTail.every(
+      (p) =>
+        dismissedPromptIds.has(p.id) ||
+        acceptedMessages.some((a) => a.id === `accepted-${p.id}`),
+    );
     if (allAnchoredHandled && resolvedMs < tailMs) {
       resolvedMs = tailMs;
     }

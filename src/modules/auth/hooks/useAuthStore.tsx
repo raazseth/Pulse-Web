@@ -15,7 +15,7 @@ import {
   persistRefreshTokenFromPair,
 } from "@/modules/auth/api/authApi";
 import { AuthState, AuthUser } from "@/modules/auth/types";
-
+import { isElectronPipSatellite } from "@/shared/utils/electronPipSatellite";
 
 const LS_USER = "pulse_user";
 
@@ -59,6 +59,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setState({ accessToken, user, isLoading: false });
       })
       .catch(() => {
+        if (isElectronPipSatellite()) {
+          setState({
+            accessToken: null,
+            user: loadStoredUser(),
+            isLoading: false,
+          });
+          return;
+        }
         clearStorage();
         setState({ accessToken: null, user: null, isLoading: false });
       });
@@ -71,8 +79,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setState((s) => ({ ...s, accessToken, user }));
       return accessToken;
     } catch {
-      clearStorage();
-      setState({ user: null, accessToken: null, isLoading: false });
+      if (!isElectronPipSatellite()) {
+        clearStorage();
+      }
+      setState((s) => ({
+        ...s,
+        user: isElectronPipSatellite() ? loadStoredUser() : null,
+        accessToken: null,
+        isLoading: false,
+      }));
       return null;
     }
   }, []);

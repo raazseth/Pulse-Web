@@ -9,6 +9,11 @@ import type {
 
 const CHANNEL = "pulse-transcript-bridge-v1";
 
+function getElectronApi() {
+  if (typeof window === "undefined") return undefined;
+  return window.api;
+}
+
 type ToMain =
   | { type: "send-chunk"; payload: TranscriptChunkInput }
   | { type: "request-state" };
@@ -20,7 +25,6 @@ type ToPip = {
   status: TranscriptStreamStatus;
 };
 
-// Called in the main window: broadcasts state to pip, relays chunk requests back.
 export function useTranscriptMainBridge(
   enabled: boolean,
   items: TranscriptItem[],
@@ -66,7 +70,33 @@ export function useTranscriptMainBridge(
 
   useEffect(() => {
     if (!enabled) return;
-    channelRef.current?.postMessage({ type: "state", items, prompts, signals, status } satisfies ToPip);
+    const api = getElectronApi();
+    const unsubChunk = api?.transcriptBridgeOnSendChunk?.((payload) => {
+      if (payload && typeof payload === "object") {
+        sendRef.current(payload as TranscriptChunkInput);
+      }
+    });
+    const unsubPlease = api?.transcriptBridgeOnPleasePush?.(() => {
+      const s = snapshotRef.current;
+      api?.transcriptBridgePushState?.({
+        type: "state",
+        items: s.items,
+        prompts: s.prompts,
+        signals: s.signals,
+        status: s.status,
+      } satisfies ToPip);
+    });
+    return () => {
+      unsubChunk?.();
+      unsubPlease?.();
+    };
+  }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const msg = { type: "state", items, prompts, signals, status } satisfies ToPip;
+    channelRef.current?.postMessage(msg);
+    getElectronApi()?.transcriptBridgePushState?.(msg);
   }, [enabled, items, prompts, signals, status]);
 }
 
@@ -80,22 +110,47 @@ export function useTranscriptPipBridge(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
-    const ch = new BroadcastChannel(CHANNEL);
-    channelRef.current = ch;
-    ch.onmessage = (e: MessageEvent<ToPip>) => {
-      if (e.data?.type !== "state") return;
+    const applyState = (raw: unknown) => {
+      const e = raw as ToPip;
+      if (e?.type !== "state") return;
       startTransition(() => {
-        setItems(e.data.items ?? []);
-        setPrompts(e.data.prompts ?? []);
-        setSignals(e.data.signals ?? []);
-        setStatus(e.data.status ?? "connecting");
+        setItems(e.items ?? []);
+        setPrompts(e.prompts ?? []);
+        setSignals(e.signals ?? []);
+        setStatus(e.status ?? "connecting");
       });
     };
+
+    const api = getElectronApi();
+    if (api?.transcriptBridgeOnState) {
+      const unsub = api.transcriptBridgeOnState(applyState);
+      void api.transcriptBridgeGetSnapshot?.().then((snap) => {
+        if (snap != null) applyState(snap);
+      });
+      return () => {
+        unsub?.();
+        channelRef.current = null;
+      };
+    }
+
+    const ch = new BroadcastChannel(CHANNEL);
+    channelRef.current = ch;
+    ch.onmessage = (ev: MessageEvent<ToPip>) => {
+      applyState(ev.data);
+    };
     ch.postMessage({ type: "request-state" } satisfies ToMain);
-    return () => { ch.close(); channelRef.current = null; };
+    return () => {
+      ch.close();
+      channelRef.current = null;
+    };
   }, [enabled]);
 
   const sendChunk = useCallback((payload: TranscriptChunkInput): boolean => {
+    const api = getElectronApi();
+    if (api?.transcriptBridgeSendChunk) {
+      api.transcriptBridgeSendChunk(payload);
+      return true;
+    }
     const ch = channelRef.current;
     if (!ch) return false;
     ch.postMessage({ type: "send-chunk", payload } satisfies ToMain);

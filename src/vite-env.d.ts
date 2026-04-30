@@ -10,6 +10,12 @@ interface ElectronApi {
   getDisplayCapturePreference(): Promise<string | null>;
   startInterview(): Promise<void>;
   stopInterview(): Promise<void>;
+  transcriptBridgePushState(state: unknown): void;
+  transcriptBridgeGetSnapshot(): Promise<unknown | null>;
+  transcriptBridgeOnState(callback: (state: unknown) => void): () => void;
+  transcriptBridgeSendChunk(payload: unknown): void;
+  transcriptBridgeOnSendChunk(callback: (payload: unknown) => void): () => void;
+  transcriptBridgeOnPleasePush(callback: () => void): () => void;
 }
 
 declare interface Window {

@@ -44,6 +44,7 @@ import { mapServerHudTagToTranscriptTag } from "@/modules/context/utils/mapServe
 import { transcriptLineHasCatalogTag } from "@/modules/tagging/utils/transcriptTagDedupe";
 import { FloatingPulseHud } from "@/shared/components/FloatingPulseHud";
 import { useHudAcceptedPromptState } from "@/shared/hooks/useHudAcceptedPromptState";
+import { hasPipQuery } from "@/shared/utils/electronPipSatellite";
 import { singleFlightByKey } from "@/shared/utils/singleFlightByKey";
 import { SessionNote } from "@/modules/context/types";
 import { TranscriptSocketTag } from "@/modules/transcript/types";
@@ -74,9 +75,7 @@ function buildTagCaptureMetadata(
 }
 
 export function App() {
-  const isPipMode =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).has("pip");
+  const isPipMode = typeof window !== "undefined" && hasPipQuery();
   const { accessToken, refreshAccessToken, user } = useAuth();
   const { setHudSocketStatus, setHudSocketError } = useTranscriptHud();
   const { toast } = useToast();
@@ -133,6 +132,7 @@ export function App() {
     transcript.sendChunk,
   );
   const pipBridge = useTranscriptPipBridge(isPipMode);
+  const pipConnected = pipBridge.status === "connected";
 
   sendChunkRef.current = isPipMode ? pipBridge.sendChunk : transcript.sendChunk;
 
@@ -715,18 +715,23 @@ export function App() {
   }, [transcript.status, transcript.errorMessage, toast]);
 
   const isConnected = transcript.status === "connected";
+
+  const transcriptLive = isPipMode ? pipConnected : isConnected;
   const sessionDisplayName =
     session.metadata.title?.trim() || session.sessionId || "Session";
+
+  useEffect(() => {
+    if (!isPipMode || accessToken || !user) return;
+    void refreshAccessToken();
+  }, [isPipMode, accessToken, user, refreshAccessToken]);
 
   const voice = useBrowserFirstVoice({
     mic,
     onDictatedText: handleBrowserDictatedText,
-    disabled: !isConnected,
+    disabled: !transcriptLive,
     getSpeakerId: () => speakerIdRef.current,
     transcribeFallbackRef: voiceTranscribeFallbackRef,
   });
-
-  const pipConnected = pipBridge.status === "connected";
 
   if (isPipMode) {
     return (

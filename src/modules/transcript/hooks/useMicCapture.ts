@@ -22,6 +22,10 @@ const SUPPORTED_MIME_TYPES = [
 
 const FETCH_TIMEOUT_MS = 30_000;
 
+function isElectronShell(): boolean {
+  return typeof window !== "undefined" && "api" in window;
+}
+
 function getSupportedMimeType(): string {
   for (const type of SUPPORTED_MIME_TYPES) {
     if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type)) {
@@ -148,10 +152,13 @@ export function useMicCapture({
           if (chunkSession !== captureSessionRef.current) return;
 
           if (res.ok) {
+            if (chunkSession === captureSessionRef.current) setError(undefined);
             const json = await res.json() as { data?: { text: string }; success: boolean };
             if (chunkSession !== captureSessionRef.current) return;
             const text = json.data?.text?.trim();
             if (text) onChunkRef.current(text);
+          } else if (isElectronShell()) {
+            setError(`Transcription failed (${res.status}). Mic still on — try again or check network.`);
           } else {
             stop();
             onVoiceBackendErrorRef.current?.();
@@ -159,8 +166,12 @@ export function useMicCapture({
         } catch (err) {
           if (err instanceof Error && err.name === "AbortError") return;
           if (chunkSession !== captureSessionRef.current) return;
-          stop();
-          onVoiceBackendErrorRef.current?.();
+          if (isElectronShell()) {
+            setError(err instanceof Error ? err.message : "Transcription request failed");
+          } else {
+            stop();
+            onVoiceBackendErrorRef.current?.();
+          }
         } finally {
           activeRequestsRef.current.delete(controller);
         }

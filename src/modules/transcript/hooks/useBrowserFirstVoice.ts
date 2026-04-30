@@ -14,6 +14,10 @@ import {
   type BrowserSpeechRecognitionErrorEvent,
 } from "@/modules/transcript/utils/browserSpeechRecognition";
 
+function isElectronShell(): boolean {
+  return typeof window !== "undefined" && "api" in window;
+}
+
 export interface BrowserFirstVoiceControls {
   speechListening: boolean;
   isActive: boolean;
@@ -142,12 +146,16 @@ export function useBrowserFirstVoice(opts: {
       mic.stop();
       return;
     }
+    if (isElectronShell() && mic.isSupported) {
+      void mic.start();
+      return;
+    }
     if (isBrowserSpeechRecognitionSupported() && onDictatedText) {
       startBrowserSpeech();
       return;
     }
     if (mic.isSupported) {
-      mic.start();
+      void mic.start();
     }
   }, [
     disabled,
