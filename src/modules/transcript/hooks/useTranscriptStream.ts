@@ -31,6 +31,15 @@ import { resolveTranscriptWsUrl } from "@/shared/utils/hudApiBaseUrl";
 
 const MAX_ITEMS = 800;
 
+function isHudSessionAccessDeniedMessage(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return (
+    m.includes("forbidden") ||
+    m.includes("owned by another user") ||
+    m.includes("authentication required")
+  );
+}
+
 function capBeforeAppend<T>(items: T[]): T[] {
   return items.length >= MAX_ITEMS ? items.slice(-(MAX_ITEMS - 1)) : items;
 }
@@ -41,6 +50,7 @@ interface UseTranscriptStreamOptions {
   refreshAccessToken?: () => Promise<string | null>;
   onSessionState?: (state: TranscriptSessionState) => void;
   onTagCreated?: (tag: TranscriptSocketTag) => void;
+  onSessionAccessDenied?: () => void;
   disabled?: boolean;
 }
 
@@ -64,12 +74,15 @@ export function useTranscriptStream({
   refreshAccessToken,
   onSessionState,
   onTagCreated,
+  onSessionAccessDenied,
   disabled = false,
 }: UseTranscriptStreamOptions) {
   const [items, setItems] = useState<TranscriptItem[]>([]);
   const [prompts, setPrompts] = useState<TranscriptSocketPrompt[]>([]);
   const [signals, setSignals] = useState<TranscriptSignalCue[]>([]);
-  const [status, setStatus] = useState<TranscriptStreamStatus>("connecting");
+  const [status, setStatus] = useState<TranscriptStreamStatus>(() =>
+    disabled ? "disconnected" : "connecting",
+  );
   const [errorMessage, setErrorMessage] = useState<string>();
   const [transcribing, setTranscribing] = useState(false);
   const transcribingIds = useRef<Set<string>>(new Set());
@@ -81,6 +94,11 @@ export function useTranscriptStream({
 
   const refreshAccessTokenRef = useRef(refreshAccessToken);
   useEffect(() => { refreshAccessTokenRef.current = refreshAccessToken; });
+
+  const onSessionAccessDeniedRef = useRef(onSessionAccessDenied);
+  useEffect(() => {
+    onSessionAccessDeniedRef.current = onSessionAccessDenied;
+  });
 
   const optimisticPendingRef = useRef<{ clientId: string; text: string; speakerId: string }[]>([]);
 
@@ -162,8 +180,12 @@ export function useTranscriptStream({
     }
 
     if (message.type === "error" && message.payload) {
-      setErrorMessage((message.payload as { message: string }).message);
+      const text = (message.payload as { message: string }).message;
+      setErrorMessage(text);
       setStatus("error");
+      if (isHudSessionAccessDeniedMessage(text)) {
+        onSessionAccessDeniedRef.current?.();
+      }
       return;
     }
 
@@ -220,7 +242,13 @@ export function useTranscriptStream({
   });
 
   useEffect(() => {
-    if (disabled) return;
+    if (disabled) {
+      startTransition(() => {
+        setStatus("disconnected");
+        setErrorMessage(undefined);
+      });
+      return;
+    }
     let isStopped = false;
 
     const connect = () => {

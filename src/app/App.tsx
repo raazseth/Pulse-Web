@@ -103,6 +103,16 @@ export function App() {
     accessToken,
     refreshAccessToken,
     disabled: isPipMode || !accessToken || !session.sessionId,
+    onSessionAccessDenied: useCallback(() => {
+      session.setSessionId("");
+      if (user?.id) {
+        try {
+          window.localStorage.removeItem(lastSessionStorageKey(user.id));
+        } catch {
+          /* noop */
+        }
+      }
+    }, [session.setSessionId, user?.id]),
     onSessionState: useCallback(
       (state: TranscriptSessionState) => {
         session.setTags(state.tags.map(mapServerHudTagToTranscriptTag));
@@ -560,6 +570,12 @@ export function App() {
   const loadedServerSessionRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (!session.sessionId.trim()) {
+      loadedServerSessionRef.current = null;
+    }
+  }, [session.sessionId]);
+
+  useEffect(() => {
     if (!accessToken || !user?.id) {
       emptyListBootstrapAttemptedRef.current = false;
       sessionBootstrapTokenRef.current = null;
@@ -578,6 +594,22 @@ export function App() {
     }
 
     const list = sessionList.sessions;
+    if (list.length > 0) {
+      const staleSessionId = session.sessionId.trim();
+      if (staleSessionId && !list.some((s) => s.id === staleSessionId)) {
+        session.setSessionId("");
+        loadedServerSessionRef.current = null;
+        if (user?.id) {
+          try {
+            window.localStorage.removeItem(lastSessionStorageKey(user.id));
+          } catch {
+            /* noop */
+          }
+        }
+        return;
+      }
+    }
+
     if (list.length === 0) {
       if (emptyListBootstrapAttemptedRef.current) {
         return;
@@ -633,6 +665,16 @@ export function App() {
       .then((snapshot) => {
         if (snapshot) {
           session.applyServerHudSnapshot(snapshot);
+        } else {
+          loadedServerSessionRef.current = null;
+          session.setSessionId("");
+          if (user?.id) {
+            try {
+              window.localStorage.removeItem(lastSessionStorageKey(user.id));
+            } catch {
+              /* noop */
+            }
+          }
         }
       })
       .catch(() => {
@@ -641,6 +683,7 @@ export function App() {
   }, [
     accessToken,
     user?.id,
+    session.sessionId,
     sessionList.loading,
     sessionList.listLoadSucceeded,
     sessionList.sessions,
@@ -665,7 +708,19 @@ export function App() {
     sessionList
       .fetchSessionSnapshot(sessionId)
       .then((snapshot) => {
-        if (snapshot) session.applyServerHudSnapshot(snapshot);
+        if (snapshot) {
+          session.applyServerHudSnapshot(snapshot);
+        } else {
+          loadedServerSessionRef.current = null;
+          session.setSessionId("");
+          if (user?.id) {
+            try {
+              window.localStorage.removeItem(lastSessionStorageKey(user.id));
+            } catch {
+              /* noop */
+            }
+          }
+        }
       })
       .catch(() => {
         if (loadedServerSessionRef.current === sessionId) {
@@ -674,9 +729,11 @@ export function App() {
       });
   }, [
     accessToken,
+    user?.id,
     session.sessionId,
     sessionList.fetchSessionSnapshot,
     session.applyServerHudSnapshot,
+    session.setSessionId,
   ]);
 
   useEffect(() => {
@@ -695,16 +752,19 @@ export function App() {
     setHudSocketError(
       transcript.status === "error" ? transcript.errorMessage : undefined,
     );
-    return () => {
-      setHudSocketStatus("disconnected");
-      setHudSocketError(undefined);
-    };
   }, [
     transcript.status,
     transcript.errorMessage,
     setHudSocketStatus,
     setHudSocketError,
   ]);
+
+  useEffect(() => {
+    return () => {
+      setHudSocketStatus("disconnected");
+      setHudSocketError(undefined);
+    };
+  }, [setHudSocketStatus, setHudSocketError]);
 
   const lastToastedSocketError = useRef<string | undefined>(undefined);
   useEffect(() => {

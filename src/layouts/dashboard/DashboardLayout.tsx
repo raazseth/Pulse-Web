@@ -5,7 +5,6 @@ import { TranscriptHudProvider } from "@/modules/transcript/context/TranscriptHu
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { PwaInstallBanner } from "@/shared/components/PwaInstallBanner";
-import { HudConnectivityBanner } from "@/shared/components/HudConnectivityBanner";
 
 const SIDEBAR_WIDTH = 280;
 const TOPBAR_HEIGHT = 64;
@@ -61,7 +60,6 @@ export function DashboardLayout() {
           }}
         >
           <PwaInstallBanner />
-          <HudConnectivityBanner />
           <Outlet />
         </Box>
       </Box>

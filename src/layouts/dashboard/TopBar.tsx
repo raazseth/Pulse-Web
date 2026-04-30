@@ -176,11 +176,8 @@ export function TopBar({
               Session HUD
             </Typography>
             {hudSocketStatus === "connected" ? (
-              <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexShrink: 0 }}>
+              <Stack sx={{ alignItems: "center", flexShrink: 0 }}>
                 <LiveDot />
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                  Live
-                </Typography>
               </Stack>
             ) : (
               <Chip

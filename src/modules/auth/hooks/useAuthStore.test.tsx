@@ -14,13 +14,19 @@ vi.mock("@/modules/auth/api/authApi", () => ({
   clearStoredRefreshToken: vi.fn(),
 }));
 
+vi.mock("@/shared/services/sessionIdb", () => ({
+  deleteTranscriptDatabase: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { apiLogin, apiRefresh, apiLogout } from "@/modules/auth/api/authApi";
+import { deleteTranscriptDatabase } from "@/shared/services/sessionIdb";
 import { AuthProvider, useAuth } from "./useAuthStore";
 import type { AuthUser, TokenPair } from "@/modules/auth/types";
 
 const mockLogin = vi.mocked(apiLogin);
 const mockRefresh = vi.mocked(apiRefresh);
 const mockLogout = vi.mocked(apiLogout);
+const mockDeleteTranscriptDatabase = vi.mocked(deleteTranscriptDatabase);
 
 const FAKE_USER: AuthUser = {
   id: "u1",
@@ -203,6 +209,28 @@ describe("AuthProvider — logout", () => {
 
     expect(mockLogout).toHaveBeenCalledOnce();
     expect(mockLogout).toHaveBeenCalledWith();
+  });
+
+  it("clears per-user HUD localStorage keys and wipes transcript IDB", async () => {
+    mockRefresh.mockResolvedValueOnce({ accessToken: "acc", user: FAKE_USER });
+    mockLogout.mockResolvedValueOnce(undefined);
+
+    localStorage.setItem("pulse_user", JSON.stringify(FAKE_USER));
+    localStorage.setItem("pulse-hud-session:u1", JSON.stringify({ sessionId: "s1" }));
+    localStorage.setItem("pulse-hud-last-session:u1", "s1");
+    localStorage.setItem("pulse-hud-session", "legacy");
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await act(async () => {});
+
+    await act(async () => {
+      await result.current.logout();
+    });
+
+    expect(localStorage.getItem("pulse-hud-session:u1")).toBeNull();
+    expect(localStorage.getItem("pulse-hud-last-session:u1")).toBeNull();
+    expect(localStorage.getItem("pulse-hud-session")).toBeNull();
+    expect(mockDeleteTranscriptDatabase).toHaveBeenCalled();
   });
 });
 

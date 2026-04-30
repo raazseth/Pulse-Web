@@ -158,7 +158,7 @@ export function SessionListProvider({ children }: PropsWithChildren) {
   const getSession = useCallback(
     async (id: string): Promise<SessionSummary | null> => {
       const res = await fetchWithAuth(getHudSessionUrl(id), {}, getToken, refreshAccessToken);
-      if (res.status === 404) return null;
+      if (res.status === 404 || res.status === 403) return null;
       if (!res.ok) throw new Error(`Get session failed (${res.status})`);
       const json = await res.json() as { data?: unknown };
       const data = json.data;
@@ -179,7 +179,7 @@ export function SessionListProvider({ children }: PropsWithChildren) {
   const fetchSessionSnapshot = useCallback(
     async (id: string): Promise<HudApiFullSnapshot | null> => {
       const res = await fetchWithAuth(getHudSessionUrl(id), {}, getToken, refreshAccessToken);
-      if (res.status === 404) return null;
+      if (res.status === 404 || res.status === 403) return null;
       if (!res.ok) throw new Error(`Get session failed (${res.status})`);
       const json = await res.json() as { data?: unknown };
       return isFullSessionSnapshot(json.data) ? json.data : null;

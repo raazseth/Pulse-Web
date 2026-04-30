@@ -1,10 +1,17 @@
 import { PropsWithChildren } from "react";
 import { ThemeProvider } from "@mui/material/styles";
-import { AuthProvider } from "@/modules/auth/hooks/useAuthStore";
+import { AuthProvider, useAuth } from "@/modules/auth/hooks/useAuthStore";
 import { SessionStoreProvider } from "@/modules/context/hooks/useSessionStore";
 import { SessionListProvider } from "@/modules/context/hooks/useSessionList";
 import { ToastProvider } from "@/shared/components/Toast";
 import { appTheme } from "./theme";
+
+function SessionStoreWithUserKey({ children }: PropsWithChildren) {
+  const { user } = useAuth();
+  return (
+    <SessionStoreProvider key={user?.id ?? "__signed_out__"}>{children}</SessionStoreProvider>
+  );
+}
 
 export function AppProviders({ children }: PropsWithChildren) {
   return (
@@ -12,7 +19,7 @@ export function AppProviders({ children }: PropsWithChildren) {
       <ToastProvider>
         <AuthProvider>
           <SessionListProvider>
-            <SessionStoreProvider>{children}</SessionStoreProvider>
+            <SessionStoreWithUserKey>{children}</SessionStoreWithUserKey>
           </SessionListProvider>
         </AuthProvider>
       </ToastProvider>

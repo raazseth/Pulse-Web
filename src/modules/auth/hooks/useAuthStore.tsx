@@ -4,6 +4,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import {
@@ -15,6 +16,8 @@ import {
   persistRefreshTokenFromPair,
 } from "@/modules/auth/api/authApi";
 import { AuthState, AuthUser } from "@/modules/auth/types";
+import { clearHudLocalStorageForUser } from "@/modules/context/utils/clearHudClientCache";
+import { deleteTranscriptDatabase } from "@/shared/services/sessionIdb";
 import { isElectronPipSatellite } from "@/shared/utils/electronPipSatellite";
 
 const LS_USER = "pulse_user";
@@ -31,9 +34,23 @@ function persistUser(user: AuthUser) {
   localStorage.setItem(LS_USER, JSON.stringify(user));
 }
 
-function clearStorage() {
+function readUserIdFromLocalStorage(): string | undefined {
+  try {
+    const raw = localStorage.getItem(LS_USER);
+    const u = raw ? (JSON.parse(raw) as { id?: string }) : null;
+    return typeof u?.id === "string" ? u.id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Clear auth tokens, HUD localStorage, and transcript IDB (used on logout and failed auth). */
+function clearStorageAndHudCaches() {
+  const uid = readUserIdFromLocalStorage();
+  clearHudLocalStorageForUser(uid);
   localStorage.removeItem(LS_USER);
   clearStoredRefreshToken();
+  void deleteTranscriptDatabase().catch(() => {});
 }
 
 interface AuthContext extends AuthState {
@@ -52,13 +69,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
     isLoading: true,
   }));
 
+  const userRef = useRef(state.user);
+  userRef.current = state.user;
+
+  const hydrateGeneration = useRef(0);
+
+  const bumpHydrateGeneration = useCallback(() => {
+    hydrateGeneration.current += 1;
+  }, []);
+
   useEffect(() => {
+    const gen = hydrateGeneration.current;
     apiRefresh()
       .then(({ accessToken, user }) => {
+        if (gen !== hydrateGeneration.current) return;
         persistUser(user);
         setState({ accessToken, user, isLoading: false });
       })
       .catch(() => {
+        if (gen !== hydrateGeneration.current) return;
         if (isElectronPipSatellite()) {
           setState({
             accessToken: null,
@@ -67,7 +96,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
           });
           return;
         }
-        clearStorage();
+        clearStorageAndHudCaches();
         setState({ accessToken: null, user: null, isLoading: false });
       });
   }, []);
@@ -80,7 +109,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       return accessToken;
     } catch {
       if (!isElectronPipSatellite()) {
-        clearStorage();
+        clearStorageAndHudCaches();
       }
       setState((s) => ({
         ...s,
@@ -100,23 +129,32 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const login = useCallback(async (email: string, password: string) => {
     const { user, tokens } = await apiLogin(email, password);
+    bumpHydrateGeneration();
     persistRefreshTokenFromPair(tokens);
     persistUser(user);
+    clearHudLocalStorageForUser(undefined);
     setState({ user, accessToken: tokens.accessToken, isLoading: false });
-  }, []);
+  }, [bumpHydrateGeneration]);
 
   const register = useCallback(async (email: string, password: string, name: string) => {
     const { user, tokens } = await apiRegister(email, password, name);
+    bumpHydrateGeneration();
     persistRefreshTokenFromPair(tokens);
     persistUser(user);
+    clearHudLocalStorageForUser(undefined);
     setState({ user, accessToken: tokens.accessToken, isLoading: false });
-  }, []);
+  }, [bumpHydrateGeneration]);
 
   const logout = useCallback(async () => {
+    const signingOutId = userRef.current?.id;
+    bumpHydrateGeneration();
     await apiLogout().catch(() => undefined);
-    clearStorage();
+    clearHudLocalStorageForUser(signingOutId);
+    localStorage.removeItem(LS_USER);
+    clearStoredRefreshToken();
+    void deleteTranscriptDatabase().catch(() => {});
     setState({ user: null, accessToken: null, isLoading: false });
-  }, []);
+  }, [bumpHydrateGeneration]);
 
   return (
     <Ctx.Provider value={{ ...state, login, register, logout, refreshAccessToken }}>

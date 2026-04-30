@@ -97,3 +97,13 @@ export async function deleteSession(sessionId: string): Promise<void> {
     tx.onabort = () => { db.close(); reject(new Error("deleteSession: transaction aborted")); };
   });
 }
+
+export function deleteTranscriptDatabase(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.deleteDatabase(DB_NAME);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error ?? new Error("deleteDatabase failed"));
+    req.onblocked = () => resolve();
+  });
+}
+

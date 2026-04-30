@@ -63,7 +63,8 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState("");
   const [displaySources, setDisplaySources] = useState<Array<{ id: string; name: string }>>([]);
-  const [displaySourceId, setDisplaySourceId] = useState("");
+  /** Electron desktopCapturer id, or "" = no preference (first screen/window at capture time). Synced to main via setDisplayCaptureSource → getDisplayMedia handler (system audio + loopback). */
+  const [preferredDisplaySourceId, setPreferredDisplaySourceId] = useState("");
   const [displaySourcesLoading, setDisplaySourcesLoading] = useState(false);
   const [displaySourcesError, setDisplaySourcesError] = useState("");
   const [serverExporting, setServerExporting] = useState<null | "json" | "csv">(null);
@@ -120,12 +121,21 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
     void Promise.all([api.listDisplaySources(), prefPromise])
       .then(([rows, preferredRaw]) => {
         setDisplaySources(rows);
-        const preferredId = typeof preferredRaw === "string" ? preferredRaw.trim() : "";
-        const matchPreferred =
-          preferredId && rows.some((r) => r.id === preferredId) ? preferredId : "";
-        const fallback =
-          rows.find((s) => s.id.startsWith("screen:"))?.id ?? rows[0]?.id ?? "";
-        setDisplaySourceId(matchPreferred || fallback);
+        const preferredNorm = preferredRaw === undefined ? null : preferredRaw;
+        const trimmed =
+          typeof preferredNorm === "string" ? preferredNorm.trim() : "";
+        if (trimmed && rows.some((r) => r.id === trimmed)) {
+          setPreferredDisplaySourceId(trimmed);
+        } else if (trimmed) {
+          setPreferredDisplaySourceId("");
+          void api.setDisplayCaptureSource(null);
+        } else if (preferredNorm === null) {
+          setPreferredDisplaySourceId("");
+        } else {
+          const fallback =
+            rows.find((s) => s.id.startsWith("screen:"))?.id ?? rows[0]?.id ?? "";
+          setPreferredDisplaySourceId(fallback);
+        }
       })
       .catch(() => setDisplaySourcesError("Could not list capture sources."))
       .finally(() => setDisplaySourcesLoading(false));
@@ -174,6 +184,26 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
       setTimeout(() => setCopied(false), 2000);
     });
   };
+
+  const persistPreferredDisplaySource = useCallback(
+    async (nextId: string) => {
+      const api = typeof window !== "undefined" ? window.api : undefined;
+      if (!api?.setDisplayCaptureSource) return;
+      try {
+        await api.setDisplayCaptureSource(nextId === "" ? null : nextId);
+        toast({
+          message:
+            nextId === ""
+              ? "Display capture will pick the first available screen."
+              : "Preferred display saved for system-audio capture.",
+          severity: "success",
+        });
+      } catch {
+        toast({ message: "Could not save display preference.", severity: "error" });
+      }
+    },
+    [toast],
+  );
 
   const metaRows = [
     session.metadata.title && { label: "Title", value: session.metadata.title },
@@ -785,8 +815,9 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                 </Box>
                 <Stack spacing={1.25}>
                   <Typography sx={{ fontSize: "0.75rem", color: "text.secondary", lineHeight: 1.45 }}>
-                    Choose which screen or window Electron prefers when you start system-audio capture. You still
-                    confirm in the OS picker; this sets the default video source (with loopback audio).
+                    When you start system-audio capture, Electron uses this display in the getDisplayMedia request
+                    (with loopback). You still confirm in the OS picker; the choice here is saved on disk and restored
+                    when you reopen the app.
                   </Typography>
                   {displaySourcesError ? (
                     <Alert severity="warning">{displaySourcesError}</Alert>
@@ -800,14 +831,40 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                     }}
                   >
                     <Stack spacing={1.25}>
-                      <FormControl fullWidth size="small" disabled={displaySourcesLoading}>
+                      <FormControl
+                        fullWidth
+                        size="small"
+                        disabled={displaySourcesLoading || displaySources.length === 0}
+                      >
                         <InputLabel id="pulse-display-source-label">Preferred source</InputLabel>
                         <Select
                           labelId="pulse-display-source-label"
                           label="Preferred source"
-                          value={displaySourceId}
-                          onChange={(e) => setDisplaySourceId(String(e.target.value))}
+                          displayEmpty
+                          value={preferredDisplaySourceId}
+                          onChange={(e) => {
+                            const next = String(e.target.value);
+                            setPreferredDisplaySourceId(next);
+                            void persistPreferredDisplaySource(next);
+                          }}
+                          renderValue={(selected) => {
+                            if (selected === "") {
+                              return (
+                                <Typography component="span" sx={{ fontStyle: "italic", color: "text.secondary" }}>
+                                  Automatic (first available screen)
+                                </Typography>
+                              );
+                            }
+                            const row = displaySources.find((s) => s.id === selected);
+                            return row?.name ?? selected;
+                          }}
+                          MenuProps={{
+                            sx: { zIndex: (theme) => theme.zIndex.modal + 100 },
+                          }}
                         >
+                          <MenuItem value="">
+                            <em>Automatic (first available screen)</em>
+                          </MenuItem>
                           {displaySources.map((s) => (
                             <MenuItem key={s.id} value={s.id}>
                               {s.name}
@@ -815,14 +872,6 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                           ))}
                         </Select>
                       </FormControl>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        disabled={!displaySourceId || displaySourcesLoading}
-                        onClick={() => window.api?.setDisplayCaptureSource?.(displaySourceId || null)}
-                      >
-                        Save preference
-                      </Button>
                     </Stack>
                   </Box>
                   <Typography sx={{ fontSize: "0.7rem", color: "text.disabled", lineHeight: 1.45 }}>

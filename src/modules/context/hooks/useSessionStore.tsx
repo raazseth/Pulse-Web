@@ -62,13 +62,26 @@ const SessionStoreContext = createContext<SessionStoreValue | null>(null);
 
 function readSnapshot(userId?: string): SessionStoreState {
   const fallback = createDefaultState();
-  const rawSnapshot = window.localStorage.getItem(userStorageKey(userId));
-  if (!rawSnapshot) return fallback;
+  const uid = userId?.trim();
+  if (!uid) {
+    return fallback;
+  }
+
+  const parseSessionId = (raw: unknown): string => {
+    if (typeof raw !== "string") return "";
+    return raw.trim();
+  };
+
+  const rawSnapshot = window.localStorage.getItem(userStorageKey(uid));
+  if (!rawSnapshot) {
+    return fallback;
+  }
 
   try {
     const snapshot = JSON.parse(rawSnapshot) as Partial<SessionSnapshot>;
-    return {
-      sessionId: snapshot.sessionId ?? fallback.sessionId,
+    const sid = parseSessionId(snapshot.sessionId);
+    const base: SessionStoreState = {
+      sessionId: sid || fallback.sessionId,
       sessionStatus: (snapshot as Partial<SessionStoreState>).sessionStatus ?? fallback.sessionStatus,
       metadata: snapshot.metadata ?? fallback.metadata,
       notes: snapshot.notes ?? fallback.notes,
@@ -76,6 +89,7 @@ function readSnapshot(userId?: string): SessionStoreState {
       selectedTranscriptId: snapshot.selectedTranscriptId,
       focusedTagId: snapshot.focusedTagId ?? fallback.focusedTagId,
     };
+    return base;
   } catch {
     return fallback;
   }
@@ -87,10 +101,6 @@ export function SessionStoreProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<SessionStoreState>(() =>
     typeof window === "undefined" ? createDefaultState() : readSnapshot(user?.id),
   );
-
-  useEffect(() => {
-    setState(readSnapshot(user?.id));
-  }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
