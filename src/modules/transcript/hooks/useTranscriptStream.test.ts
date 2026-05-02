@@ -12,6 +12,12 @@ vi.mock("@/shared/services/sessionIdb", () => ({
   saveSession: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/shared/services/offlineQueue", () => ({
+  enqueueOfflineMutation: vi.fn().mockResolvedValue(undefined),
+  drainOfflineQueue: vi.fn().mockResolvedValue([]),
+  clearOfflineQueue: vi.fn().mockResolvedValue(undefined),
+}));
+
 import {
   createTranscriptSocket,
   sendTranscriptChunk,
@@ -474,13 +480,13 @@ describe("useTranscriptStream — IDB save debounce", () => {
 });
 
 describe("useTranscriptStream — sendChunk", () => {
-  it("returns false and does not send when socket is not OPEN", () => {
+  it("queues offline (returns true) and does not WS-send when socket is not OPEN", () => {
     mockSocket.readyState = WebSocket.CONNECTING;
     const { result } = renderHook(() =>
       useTranscriptStream({ sessionId: "s1" }),
     );
     const sent = result.current.sendChunk({ text: "hello" });
-    expect(sent).toBe(false);
+    expect(sent).toBe(true);
     expect(sendTranscriptChunk).not.toHaveBeenCalled();
   });
 
@@ -545,13 +551,13 @@ describe("useTranscriptStream — sendChunk", () => {
 });
 
 describe("useTranscriptStream — createTag", () => {
-  it("returns false and does not send when socket is not OPEN", () => {
+  it("queues offline (returns true) and does not WS-send when socket is not OPEN", () => {
     mockSocket.readyState = WebSocket.CLOSED;
     const { result } = renderHook(() =>
       useTranscriptStream({ sessionId: "s1" }),
     );
     const sent = result.current.createTag({ label: "insight" });
-    expect(sent).toBe(false);
+    expect(sent).toBe(true);
     expect(sendTranscriptTag).not.toHaveBeenCalled();
   });
 

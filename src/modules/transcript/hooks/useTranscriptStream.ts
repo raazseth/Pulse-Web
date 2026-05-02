@@ -18,6 +18,10 @@ import {
   saveSession,
 } from "@/shared/services/sessionIdb";
 import {
+  drainOfflineQueue,
+  enqueueOfflineMutation,
+} from "@/shared/services/offlineQueue";
+import {
   TranscriptChunkInput,
   TranscriptItem,
   TranscriptSessionState,
@@ -110,6 +114,31 @@ export function useTranscriptStream({
       setSignals(state.signals ?? []);
     });
     onSessionState?.(state);
+
+    void drainOfflineQueue(state.session.id).then((queued) => {
+      if (!queued.length) return;
+      const socket = socketRef.current;
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      for (const m of queued) {
+        if (m.type === "transcript:chunk") {
+          const text = m.payload.text.trim();
+          if (!text) continue;
+          const speakerId = m.payload.speakerId?.trim() || "interviewee";
+          const timestamp = m.payload.timestamp ?? m.enqueuedAt;
+          const pendingId = `client-pending:${crypto.randomUUID()}`;
+          optimisticPendingRef.current.push({ clientId: pendingId, text, speakerId });
+          startTransition(() => {
+            setItems((current) => [
+              ...capBeforeAppend(current),
+              stampItem({ id: pendingId, text, timestamp, speakerId }),
+            ]);
+          });
+          sendTranscriptChunk(socket, m.sessionId, { text, speakerId, timestamp });
+        } else if (m.type === "tag:create") {
+          sendTranscriptTag(socket, { sessionId: m.sessionId, ...m.payload });
+        }
+      }
+    }).catch(() => {});
   });
 
   const handleTag = useEffectEvent((tag: TranscriptSocketTag) => {
@@ -346,30 +375,28 @@ export function useTranscriptStream({
   const actions = useMemo(
     () => ({
       sendChunk(payload: TranscriptChunkInput) {
-        if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-          return false;
-        }
         const text = payload.text.trim();
         if (!text) return false;
         const speakerId = payload.speakerId?.trim() || "interviewee";
         const timestamp = payload.timestamp ?? new Date().toISOString();
         const pendingId = `client-pending:${crypto.randomUUID()}`;
-        optimisticPendingRef.current.push({
-          clientId: pendingId,
-          text,
-          speakerId,
-        });
+
+        optimisticPendingRef.current.push({ clientId: pendingId, text, speakerId });
         startTransition(() => {
-          setItems((current) => {
-            const optimistic = stampItem({
-              id: pendingId,
-              text,
-              timestamp,
-              speakerId,
-            });
-            return [...capBeforeAppend(current), optimistic];
-          });
+          setItems((current) => [
+            ...capBeforeAppend(current),
+            stampItem({ id: pendingId, text, timestamp, speakerId }),
+          ]);
         });
+
+        if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+          void enqueueOfflineMutation({
+            type: "transcript:chunk",
+            sessionId,
+            payload: { text, speakerId, timestamp, context: payload.context },
+          }).catch(() => {});
+          return true;
+        }
         sendTranscriptChunk(socketRef.current, sessionId, { ...payload, text, speakerId });
         return true;
       },
@@ -380,7 +407,12 @@ export function useTranscriptStream({
         metadata?: Record<string, string>;
       }) {
         if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-          return false;
+          void enqueueOfflineMutation({
+            type: "tag:create",
+            sessionId,
+            payload,
+          }).catch(() => {});
+          return true;
         }
         sendTranscriptTag(socketRef.current, { sessionId, ...payload });
         return true;
