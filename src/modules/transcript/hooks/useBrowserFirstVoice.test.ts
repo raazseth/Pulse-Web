@@ -145,7 +145,7 @@ describe("useBrowserFirstVoice — toggle", () => {
   });
 
   it("calls mic.start() in Electron shell if mic is supported", () => {
-    (window as Window & { api?: unknown }).api = {};
+    (window as unknown as { api?: unknown }).api = {};
     vi.mocked(getSpeechRecognitionConstructor).mockReturnValue(null);
     const mic = makeMic({ isSupported: true });
     const { result } = renderHook(() =>
